@@ -11,7 +11,7 @@
     header { padding: 12px 24px; border-bottom: 1px solid var(--line); display: flex; gap: 24px; align-items: baseline; }
     header a { text-decoration: none; color: inherit; }
     header .brand { font-weight: 700; }
-    main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    main { max-width: 1320px; margin: 0 auto; padding: 24px; overflow-x: auto; }
     h1 { font-size: 22px; margin: 0 0 16px; }
     h2 { font-size: 16px; margin: 24px 0 8px; }
     table { border-collapse: collapse; width: 100%; }
@@ -32,13 +32,26 @@
     button.approve { background: var(--ok); color: #fff; border-color: var(--ok); }
     button.reject { background: var(--bad); color: #fff; border-color: var(--bad); }
     .error { color: var(--bad); font-weight: 600; margin: 8px 0; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+    .card .big { font-size: 22px; font-weight: 700; }
+    .warn { color: #9a6700; } .bad { color: var(--bad); } .good { color: var(--ok); }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .timeline td { padding: 3px 10px; border: 0; font-size: 13px; }
     .tag.escalate, .tag.flag { color: #9a6700; border-color: #9a6700; }
     .escalation { border: 1px solid #9a6700; border-radius: 8px; padding: 10px 14px; margin: 12px 0; }
     .escalation ul { margin: 6px 0; padding-left: 20px; }
   </style>
 </head>
 <body>
-  <header><a class="brand" href="/">Hatch</a><a href="/review">Human review</a></header>
+  <header>
+    <a class="brand" href="/">Hatch</a>
+    <a href="/">Portfolio</a>
+    <a href="/review">Human review</a>
+    <a href="/queue">Queue</a>
+    <a href="/costs">Costs</a>
+    <a href="/decisions">Decisions</a>
+  </header>
   <main>{% block content %}{% endblock %}</main>
 </body>
 </html>

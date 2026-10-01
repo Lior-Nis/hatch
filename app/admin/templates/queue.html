@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Queue · Hatch{% endblock %}
+{% macro job_rows(jobs) %}
+  {% for job in jobs %}
+  <tr>
+    <td><span class="tag">{{ job.status.value }}</span></td><td>{{ job.job_type }}</td>
+    <td class="num">{{ job.attempts }}/{{ job.max_attempts }}</td>
+    <td>{% if job.experiment_id %}<a href="/experiments/{{ job.experiment_id }}">experiment</a>{% else %}—{% endif %}</td>
+    <td class="muted">{{ job.run_at.strftime("%Y-%m-%d %H:%M") }}</td>
+    <td>{{ job.error or "" }}</td>
+  </tr>
+  {% endfor %}
+{% endmacro %}
+{% block content %}
+<h1>Queue</h1>
+<p>{{ counts.running }} running · {{ counts.queued }} queued · <span class="{{ 'bad' if counts.failed else '' }}">{{ counts.failed }} failed</span> · {{ counts.succeeded }} succeeded</p>
+
+{% if stalls %}
+<h2 class="bad">Stalled</h2>
+<table>
+  {% for stall in stalls %}
+  <tr><td>{{ stall.kind }}</td><td>{{ stall.detail }}</td><td class="muted">since {{ stall.since.strftime("%Y-%m-%d %H:%M") }} UTC</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h2>Failed</h2>
+{% if failed %}<table><tr><th>Status</th><th>Job</th><th class="num">Attempts</th><th>For</th><th>Due</th><th>Error</th></tr>{{ job_rows(failed) }}</table>
+{% else %}<p class="muted">No failed jobs.</p>{% endif %}
+
+<h2>Running and queued</h2>
+{% if active %}<table><tr><th>Status</th><th>Job</th><th class="num">Attempts</th><th>For</th><th>Due</th><th>Last error</th></tr>{{ job_rows(active) }}</table>
+{% else %}<p class="muted">Nothing running or queued.</p>{% endif %}
+
+<h2>Recently finished</h2>
+<table><tr><th>Status</th><th>Job</th><th class="num">Attempts</th><th>For</th><th>Due</th><th></th></tr>{{ job_rows(recent) }}</table>
+{% endblock %}

@@ -23,7 +23,7 @@ project **Hatch**. Read the PRD item there before changing behaviour.
     HATCH_MEDIA_PROVIDER=fake uv run hatch run-fixture   # free synthetic video
     uv run hatch run-fixture                             # real Higgsfield generation (needs API keys)
     uv run hatch lineage <experiment_id>                 # why the video exists and how it was made
-    uv run hatch serve                                   # human review UI at http://127.0.0.1:8321/review
+    uv run hatch serve                                   # dashboard + human review at http://127.0.0.1:8321
     uv run hatch costs                                   # spend by video, IP, provider, day
 
 Background mode (durable queue in Postgres; survives restarts):

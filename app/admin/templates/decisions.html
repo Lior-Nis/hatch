@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Decisions · Hatch{% endblock %}
+{% block content %}
+<h1>Decisions {% if ip %}<span class="muted">for {{ ip }} · <a href="/decisions">all</a></span>{% endif %}</h1>
+<p class="muted">Every selection, replication request, verdict, promotion, archive and resurrection, with the reason recorded at the time.</p>
+<table>
+  <tr><th>When (UTC)</th><th>Decision</th><th>IP</th><th>Reason</th><th>About</th><th>Policy</th></tr>
+  {% for decision in decisions %}
+  <tr>
+    <td class="muted">{{ decision.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+    <td><span class="tag">{{ decision.decision_type.value }}</span>{% if decision.bucket %} <span class="tag">{{ decision.bucket.value }}</span>{% endif %}</td>
+    <td>{% if decision.ip %}<a href="/ips/{{ decision.ip.slug }}">{{ decision.ip.slug }}</a>{% endif %}</td>
+    <td>{{ decision.reason }}</td>
+    <td>{% if decision.subject_experiment_id %}<a href="/experiments/{{ decision.subject_experiment_id }}">subject</a>{% endif %}
+      {% if decision.resulting_experiment_id %}<a href="/experiments/{{ decision.resulting_experiment_id }}">result</a>{% endif %}</td>
+    <td class="muted">{{ decision.policy_version }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% if not decisions %}<p class="muted">No decisions yet.</p>{% endif %}
+{% endblock %}

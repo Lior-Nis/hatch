@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Experiment · {{ lineage.ip.name }} · Hatch{% endblock %}
+{% block content %}
+<h1><a href="/ips/{{ lineage.ip.slug }}">{{ lineage.ip.name }}</a> experiment
+  <span class="tag">{{ lineage.experiment.status }}</span>
+  <span class="tag">video {{ lineage.experiment.video_status }}</span>
+  {% if lineage.experiment.conclusion %}<span class="tag">{{ lineage.experiment.conclusion }}</span>{% endif %}</h1>
+<div class="review">
+  <div>
+    {% if lineage.final_asset %}
+    <video controls preload="metadata" src="/assets/{{ lineage.final_asset.id }}/content"></video>
+    {% else %}<p class="muted">No video yet.</p>{% endif %}
+    <p><a href="/review/{{ lineage.experiment.id }}">Open in human review</a></p>
+    <h2>Family</h2>
+    {% for link in parents %}<p>{{ link.relation.value }} of <a href="/experiments/{{ link.parent_id }}">parent experiment</a></p>{% endfor %}
+    {% if not parents %}<p class="muted">Parentless (novel exploration).</p>{% endif %}
+    {% for link in children %}<p>→ <a href="/experiments/{{ link.experiment_id }}">{{ link.relation.value }} descendant</a></p>{% endfor %}
+    <p class="muted">Lineage <code>{{ lineage.experiment.lineage_id }}</code></p>
+  </div>
+  <div>
+    <h2 style="margin-top:0">Why this video exists</h2>
+    <p><strong>Hypothesis.</strong> {{ lineage.hypothesis.statement }}</p>
+    <p class="muted">{{ lineage.hypothesis.rationale }}</p>
+    <p class="muted">{{ lineage.experiment.generation_reason }}</p>
+    <p class="muted">Prediction: {{ lineage.hypothesis.prediction.metric }} {{ lineage.hypothesis.prediction.direction }}
+      by at least {{ lineage.hypothesis.prediction.minimum_relative_effect }} versus {{ lineage.hypothesis.prediction.compared_to }},
+      testing {{ lineage.hypothesis.prediction.genes_under_test | join(", ") }}.</p>
+
+    <h2>Decisions about it</h2>
+    {% if decisions %}
+    <table>
+      {% for decision in decisions %}
+      <tr><td class="muted">{{ decision.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+        <td><span class="tag">{{ decision.decision_type.value }}</span></td><td>{{ decision.reason }}</td></tr>
+      {% endfor %}
+    </table>
+    {% else %}<p class="muted">None yet.</p>{% endif %}
+
+    <h2>Fitness</h2>
+    {% if fitness %}
+    <table>
+      <tr><th>Platform</th><th>Checkpoint</th><th class="num">Score</th><th class="num">Confidence</th><th>Formula</th></tr>
+      {% for row in fitness %}
+      <tr><td>{{ row.platform.value }}</td><td>{{ row.checkpoint }}</td>
+        <td class="num">{{ "%.2f" | format(row.score) }}</td>
+        <td class="num">{{ "%.2f" | format(row.inputs.get("confidence", 1.0)) }}</td>
+        <td class="muted">{{ row.evaluator }} v{{ row.evaluator_version }}</td></tr>
+      {% endfor %}
+    </table>
+    {% else %}<p class="muted">Not evaluated yet.</p>{% endif %}
+
+    <h2>Publications</h2>
+    {% if lineage.publications %}
+    <table>
+      {% for publication in lineage.publications %}
+      <tr><td>{{ publication.platform }}</td><td><span class="tag">{{ publication.status }}</span></td>
+        <td class="muted">{{ publication.platform_post_id or "—" }}</td>
+        <td class="muted">{% if publication.published_at %}{{ publication.published_at.strftime("%Y-%m-%d %H:%M") }} UTC{% endif %}</td></tr>
+      {% endfor %}
+    </table>
+    {% else %}<p class="muted">Not published.</p>{% endif %}
+
+    <h2>Everything that happened · ${{ "%.2f" | format(lineage.cost.committed_usd) }}</h2>
+    <table class="timeline">
+      {% for event in timeline %}
+      <tr><td class="muted">{{ event.at.strftime("%m-%d %H:%M:%S") }}</td>
+        <td class="{{ 'bad' if event.level == 'error' else ('warn' if event.level == 'warning' else '') }}">{{ event.kind }}</td>
+        <td>{{ event.detail }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

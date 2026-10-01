@@ -17,12 +17,15 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.admin import views
 from app.bootstrap import build_asset_store
+from app.budgets.governor import BudgetLimits
 from app.config import get_settings
 from app.db import make_engine, registry
 from app.experiments.lineage import ExperimentNotFound, Lineage, get_lineage
 from app.experiments.models import Experiment
 from app.experiments.states import VideoStatus
+from app.observability.trace import experiment_timeline
 from app.production.models import Asset
 from app.quality.models import HumanReview, QAResult, ReviewDecision
 from app.quality.ports import QAOutcome
@@ -103,9 +106,54 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Hatch", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.engine = None
 
-    @app.get("/")
-    def index() -> RedirectResponse:
-        return RedirectResponse("/review", status_code=307)
+    def limits() -> BudgetLimits:
+        return BudgetLimits.from_settings(get_settings())
+
+    @app.get("/", response_class=HTMLResponse)
+    def dashboard(request: Request, session: SessionDep) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request, "dashboard.html", views.portfolio(session, limits())
+        )
+
+    @app.get("/ips/{slug}", response_class=HTMLResponse)
+    def ip_page(request: Request, slug: str, session: SessionDep) -> HTMLResponse:
+        detail = views.ip_detail(session, slug)
+        if detail is None:
+            raise HTTPException(status_code=404, detail="IP not found")
+        return templates.TemplateResponse(request, "ip.html", detail)
+
+    @app.get("/experiments/{experiment_id}", response_class=HTMLResponse)
+    def experiment_page(
+        request: Request, experiment_id: uuid.UUID, session: SessionDep
+    ) -> HTMLResponse:
+        lineage = _lineage_or_404(session, experiment_id)
+        return templates.TemplateResponse(
+            request,
+            "experiment.html",
+            {
+                "lineage": lineage,
+                "timeline": experiment_timeline(session, experiment_id),
+                **views.experiment_relations(session, experiment_id),
+            },
+        )
+
+    @app.get("/queue", response_class=HTMLResponse)
+    def queue_page(request: Request, session: SessionDep) -> HTMLResponse:
+        return templates.TemplateResponse(request, "queue.html", views.queue(session))
+
+    @app.get("/costs", response_class=HTMLResponse)
+    def costs_page(request: Request, session: SessionDep) -> HTMLResponse:
+        return templates.TemplateResponse(request, "costs.html", views.costs(session, limits()))
+
+    @app.get("/decisions", response_class=HTMLResponse)
+    def decisions_page(
+        request: Request, session: SessionDep, ip: str | None = None
+    ) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "decisions.html",
+            {"decisions": views.decisions(session, ip_slug=ip), "ip": ip},
+        )
 
     @app.get("/review", response_class=HTMLResponse)
     def review_queue(request: Request, session: SessionDep) -> HTMLResponse:

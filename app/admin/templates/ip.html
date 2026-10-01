@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ ip.name }} · Hatch{% endblock %}
+{% block content %}
+<h1>{{ ip.name }} <span class="tag">{{ ip.status.value }}</span></h1>
+<p>{{ ip.spec.premise }}</p>
+<p class="muted">{{ ip.category }} · ages {{ ip.spec.age_range | join("–") }} · {{ ip.spec.visual_identity }}</p>
+
+<h2>IP fitness</h2>
+{% if fitness %}
+<p><strong>{{ "%.2f" | format(fitness.score) }}</strong>
+  {% if not fitness.inputs.sufficient_evidence %}<span class="warn">— not enough evidence yet (neutral value)</span>{% endif %}
+  <span class="muted">· {{ fitness.inputs.videos_considered }} videos considered · {{ fitness.evaluator }} v{{ fitness.evaluator_version }} · {{ fitness.created_at.strftime("%Y-%m-%d %H:%M") }} UTC</span></p>
+<table>
+  <tr><th>Platform</th><th class="num">Median fitness</th><th class="num">Videos</th><th>Counted</th></tr>
+  {% for platform, summary in fitness.inputs.platforms.items() %}
+  <tr><td>{{ platform }}</td><td class="num">{{ "%.2f" | format(summary.score) }}</td>
+    <td class="num">{{ summary.videos }}</td><td>{{ "yes" if summary.sufficient else "no (too few videos)" }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}<p class="muted">No fitness yet: nothing has been observed.</p>{% endif %}
+
+<h2>Why it is where it is</h2>
+<table>
+  {% for decision in decisions %}
+  <tr><td class="muted">{{ decision.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+    <td><span class="tag">{{ decision.decision_type.value }}</span>{% if decision.bucket %} <span class="tag">{{ decision.bucket.value }}</span>{% endif %}</td>
+    <td>{{ decision.reason }}</td></tr>
+  {% endfor %}
+</table>
+<p><a href="/decisions?ip={{ ip.slug }}">All decisions for this IP</a></p>
+
+<h2>What we currently believe</h2>
+{% if knowledge %}
+<table>
+  {% for summary in knowledge %}
+  <tr><td class="num">{{ "%.2f" | format(summary.confidence) }}</td><td>{{ summary.statement }}</td>
+    <td class="muted">{{ summary.supporting_experiments | length }} experiment(s), v{{ summary.version }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}<p class="muted">Nothing yet.</p>{% endif %}
+
+<h2>Experiments</h2>
+<table>
+  <tr><th>Created</th><th>Origin</th><th>Hypothesis</th><th>Video</th><th class="num">Fitness</th><th>Conclusion</th></tr>
+  {% for row in experiments %}
+  <tr>
+    <td class="muted"><a href="/experiments/{{ row.experiment.id }}">{{ row.experiment.created_at.strftime("%m-%d %H:%M") }}</a></td>
+    <td>{{ row.relation }}{% if row.parent_id %} of <a href="/experiments/{{ row.parent_id }}">parent</a>{% endif %}</td>
+    <td>{{ row.experiment.hypothesis.statement }}</td>
+    <td><span class="tag">{{ row.experiment.video_status.value }}</span></td>
+    <td class="num">{% if row.score is not none %}{{ "%.2f" | format(row.score) }}{% else %}—{% endif %}</td>
+    <td>{% if row.experiment.conclusion %}<span class="tag">{{ row.experiment.conclusion.value }}</span>{% else %}—{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}
