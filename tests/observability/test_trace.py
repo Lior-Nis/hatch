@@ -43,7 +43,7 @@ def run_pipeline(session: Session, tmp_path: Path, generator: FakeMediaGenerator
 def test_timeline_traces_a_failed_experiment_end_to_end(session: Session, tmp_path: Path) -> None:
     experiment = make_experiment(session)
     enqueue_production(session, experiment.id)
-    run_pipeline(session, tmp_path, FakeMediaGenerator(fail_next=["nsfw: flagged by provider"]))
+    run_pipeline(session, tmp_path, FakeMediaGenerator(fail_next=["nsfw: flagged by provider"] * 3))
 
     events = experiment_timeline(session, experiment.id)
 
@@ -101,7 +101,7 @@ def test_timeline_shows_budget_blocks(session: Session, tmp_path: Path) -> None:
 def test_rendered_timeline_is_readable_text(session: Session, tmp_path: Path) -> None:
     experiment = make_experiment(session)
     enqueue_production(session, experiment.id)
-    run_pipeline(session, tmp_path, FakeMediaGenerator(fail_next=["provider outage"]))
+    run_pipeline(session, tmp_path, FakeMediaGenerator(fail_next=["provider outage"] * 3))
 
     text = render_timeline(experiment_timeline(session, experiment.id))
 

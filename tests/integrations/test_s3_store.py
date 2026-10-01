@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.storage import AssetNotFound
 from integrations.object_storage.s3 import S3AssetStore
-from tests.factories import make_generated_experiment
+from tests.factories import final_asset, make_generated_experiment
 
 BUCKET = "hatch-test-assets"
 
@@ -91,7 +91,7 @@ def test_generated_video_bytes_live_in_object_storage_not_in_postgres(
 ) -> None:
     experiment = make_generated_experiment(session, tmp_path, store=store)
 
-    [asset] = experiment.assets
+    asset = final_asset(experiment)
 
     assert asset.storage_uri.startswith(f"s3://{BUCKET}/experiments/{experiment.id}/")
     downloaded = store.local_path(asset.storage_uri)

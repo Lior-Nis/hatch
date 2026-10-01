@@ -22,7 +22,7 @@ from app.experiments.spec import OutputRequirements
 from app.llm.ports import LanguageModel
 from app.production.jobs import PRODUCE_SHORT, produce_short_handler
 from app.production.ports import MediaGenerator
-from app.production.run import ProductionDeps
+from app.production.run import ProductionDeps, RetryPolicy
 from app.quality.jobs import RUN_QA, run_qa_handler
 from app.quality.ports import QAGate
 from app.quality.technical import TechnicalQAGate
@@ -118,10 +118,19 @@ def build_qa_gates(settings: Settings) -> list[QAGate]:
 
 
 def build_production_deps(settings: Settings) -> ProductionDeps:
+    try:
+        llm: LanguageModel | None = build_language_model(settings)
+    except ConfigurationError:
+        llm = None  # single-scene videos do not need one
     return ProductionDeps(
         generator=build_media_generator(settings),
         store=build_asset_store(settings),
         governor=BudgetGovernor(BudgetLimits.from_settings(settings)),
+        llm=llm,
+        retry=RetryPolicy(
+            max_attempts_per_scene=settings.generation_max_attempts_per_scene,
+            max_regenerations_after_qa=settings.generation_max_regenerations_after_qa,
+        ),
         poll_interval_seconds=settings.generation_poll_interval_seconds,
         timeout_seconds=settings.generation_timeout_seconds,
     )
@@ -134,7 +143,11 @@ def build_job_handlers(settings: Settings) -> dict[str, JobHandler]:
         PRODUCE_SHORT: produce_short_handler(
             deps, poll_interval=timedelta(seconds=settings.generation_poll_interval_seconds)
         ),
-        RUN_QA: run_qa_handler(gates=build_qa_gates(settings), store=deps.store),
+        RUN_QA: run_qa_handler(
+            gates=build_qa_gates(settings),
+            store=deps.store,
+            max_regenerations=settings.generation_max_regenerations_after_qa,
+        ),
     }
     try:
         llm = build_language_model(settings)

@@ -17,7 +17,7 @@ from app.budgets.models import LedgerStatus
 from app.db import utcnow
 from app.experiments.lineage import ExperimentNotFound
 from app.experiments.models import Experiment
-from app.production.models import AttemptStatus
+from app.production.models import AttemptStatus, ProductionStep, StepStatus
 from app.quality.ports import QAOutcome
 from app.scheduling.models import JobStatus
 
@@ -112,7 +112,10 @@ def experiment_timeline(session: Session, experiment_id: uuid.UUID) -> list[Time
             add(entry.settled_at, "budget_settled", f"{what}: {actual}")
 
     for attempt in experiment.generation_attempts:
-        label = f"attempt {attempt.attempt_number} on {attempt.provider} {attempt.model}"
+        label = (
+            f"attempt {attempt.attempt_number} ({attempt.strategy}) on "
+            f"{attempt.provider} {attempt.model}"
+        )
         if attempt.status is AttemptStatus.BLOCKED_BUDGET:
             add(attempt.finished_at, "generation_blocked", f"{label}: {attempt.error}", "error")
             continue
@@ -125,6 +128,14 @@ def experiment_timeline(session: Session, experiment_id: uuid.UUID) -> list[Time
             add(attempt.finished_at, "generation_succeeded", label)
         elif attempt.status is AttemptStatus.FAILED:
             add(attempt.finished_at, "generation_failed", f"{label}: {attempt.error}", "error")
+
+    for step in session.scalars(
+        select(ProductionStep).where(ProductionStep.experiment_id == experiment.id)
+    ):
+        if step.status is StepStatus.FAILED:
+            add(step.finished_at, "step_failed", f"{step.key}: {step.error}", "error")
+        elif step.status is StepStatus.SUCCEEDED:
+            add(step.finished_at, "step_succeeded", step.key)
 
     for asset in experiment.assets:
         info = asset.media_info

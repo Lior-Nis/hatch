@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import update
 from sqlalchemy.orm import Session
@@ -8,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.budgets.governor import BudgetGovernor
 from app.experiments.models import Experiment
 from app.observability.health import find_stalls, provider_health
-from app.production.run import ProductionDeps, produce_short
+from app.production.run import ProductionDeps, RetryPolicy, produce_short
 from app.scheduling.models import JobRun
 from app.scheduling.queue import claim_next, enqueue
 from integrations.fake.media import FakeMediaGenerator
@@ -19,7 +20,7 @@ NOW = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 
 
 def produce(
-    session: Session, tmp_path: Path, generator: FakeMediaGenerator, **deps: float
+    session: Session, tmp_path: Path, generator: FakeMediaGenerator, **deps: Any
 ) -> Experiment:
     experiment = make_experiment(session)
     produce_short(
@@ -31,6 +32,7 @@ def produce(
             governor=BudgetGovernor(LIMITS),
             poll_interval_seconds=0.0,
             sleep=lambda seconds: None,
+            retry=RetryPolicy(max_attempts_per_scene=1),
             **deps,
         ),
     )

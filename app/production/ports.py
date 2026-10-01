@@ -18,6 +18,11 @@ class ProviderError(Exception):
     """A vendor call failed in a way the caller may retry or report."""
 
 
+class ProductionError(ValueError):
+    """Production cannot proceed as planned (bad storyboard, missing
+    capability). Retrying without changing something will not help."""
+
+
 class MediaOperation(StrEnum):
     TEXT_TO_VIDEO = "text_to_video"
 

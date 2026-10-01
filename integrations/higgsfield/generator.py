@@ -59,7 +59,7 @@ def _request_body(request: MediaRequest) -> dict[str, Any]:
         "duration": request.duration_seconds,
         "aspect_ratio": request.aspect_ratio,
     }
-    if request.resolution is not None:
+    if request.resolution not in (None, "default"):
         # Always explicit: some endpoints default to their most expensive tier.
         body["resolution"] = request.resolution
     if (audio_field := _audio_field(request.model)) is not None:

@@ -13,7 +13,7 @@ from app.quality.runner import QANotAllowed, run_quality_gates
 from app.quality.technical import TechnicalQAGate
 from integrations.fake.quality import FakeQAGate
 from integrations.object_storage.local import LocalAssetStore
-from tests.factories import make_experiment, make_generated_experiment
+from tests.factories import final_asset, make_experiment, make_generated_experiment
 
 
 class ExplodingGate:
@@ -50,7 +50,7 @@ def test_passing_gates_send_the_video_to_human_approval(
     [result] = session.scalars(select(QAResult)).all()
     assert (result.gate, result.gate_version, result.mandatory) == ("technical", "1", True)
     assert result.outcome is QAOutcome.PASS
-    assert result.asset_id == experiment.assets[0].id
+    assert result.asset_id == final_asset(experiment).id
     assert result.details["media"]["height"] == 1920
 
 

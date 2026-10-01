@@ -11,10 +11,12 @@ from app.experiments.models import Experiment
 from app.experiments.states import ExperimentStatus, VideoStatus
 from app.production.models import Asset, AssetKind, AttemptStatus
 from app.production.probe import probe_media
-from app.production.run import ProductionDeps, produce_short
+from app.production.run import ProductionDeps, RetryPolicy, produce_short
 from integrations.fake.media import FakeMediaGenerator
 from integrations.object_storage.local import LocalAssetStore
-from tests.factories import make_experiment
+from tests.factories import final_asset, make_experiment
+
+NO_RETRY = RetryPolicy(max_attempts_per_scene=1)
 
 LIMITS = BudgetLimits(
     max_per_generation_usd=Decimal("0.75"),
@@ -50,7 +52,7 @@ def test_fixture_experiment_produces_a_playable_vertical_short(
     loaded = session.get_one(Experiment, experiment.id)
     assert loaded.video_status is VideoStatus.GENERATED
     assert loaded.status is ExperimentStatus.RUNNING
-    [asset] = loaded.assets
+    asset = final_asset(loaded)
     assert result.asset_id == asset.id
     assert asset.kind is AssetKind.FINAL_VIDEO
     assert asset.mime_type == "video/mp4"
@@ -83,7 +85,7 @@ def test_successful_attempt_records_model_prompt_config_timestamps_and_cost(
     assert attempt.started_at <= attempt.finished_at
     assert attempt.estimated_cost_usd == Decimal("0.40")
     assert attempt.actual_cost_usd == Decimal("0.40")
-    [asset] = loaded.assets
+    asset = final_asset(loaded)
     assert asset.generation_attempt_id == attempt.id
     [entry] = loaded.ledger_entries
     assert entry.status is LedgerStatus.SETTLED
@@ -97,7 +99,7 @@ def test_provider_failure_is_recorded_and_no_asset_is_created(
     experiment = make_experiment(session)
     generator = FakeMediaGenerator(fail_next=["content policy rejection"])
 
-    result = produce_short(session, experiment.id, deps(tmp_path, generator))
+    result = produce_short(session, experiment.id, deps(tmp_path, generator, retry=NO_RETRY))
 
     session.expire_all()
     loaded = session.get_one(Experiment, experiment.id)
@@ -144,7 +146,8 @@ def test_rerunning_a_finished_production_does_not_generate_or_charge_again(
 
     assert second.asset_id == first.asset_id
     assert len(generator.submitted_requests) == 1
-    assert len(session.scalars(select(Asset)).all()) == 1
+    finals = select(Asset).where(Asset.kind == AssetKind.FINAL_VIDEO)
+    assert len(session.scalars(finals).all()) == 1
     assert len(session.scalars(select(BudgetLedgerEntry)).all()) == 1
 
 
@@ -174,7 +177,8 @@ def test_production_refuses_an_experiment_whose_video_already_failed(
     session: Session, tmp_path: Path
 ) -> None:
     experiment = make_experiment(session)
-    produce_short(session, experiment.id, deps(tmp_path, FakeMediaGenerator(fail_next=["boom"])))
+    failing = FakeMediaGenerator(fail_next=["boom"])
+    produce_short(session, experiment.id, deps(tmp_path, failing, retry=NO_RETRY))
     healthy = FakeMediaGenerator()
 
     with pytest.raises(ValueError, match="generation_failed"):

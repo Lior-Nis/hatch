@@ -12,6 +12,7 @@ from app.experiments.fixtures import FIRST_SHORT
 from app.experiments.models import Experiment
 from app.experiments.service import create_experiment
 from app.experiments.states import VideoStatus
+from app.production.models import Asset, AssetKind
 from app.production.run import ProductionDeps, produce_short
 from app.quality.runner import run_quality_gates
 from app.quality.technical import TechnicalQAGate
@@ -35,6 +36,11 @@ def make_experiment(
         ip = spec.ip.model_copy(update={"slug": ip_slug, "name": ip_slug.title()})
         spec = spec.model_copy(update={"ip": ip})
     return create_experiment(session, spec, lineage_id=lineage_id)
+
+
+def final_asset(experiment: Experiment) -> Asset:
+    """The experiment's finished video (as opposed to its raw scene clips)."""
+    return next(a for a in reversed(experiment.assets) if a.kind is AssetKind.FINAL_VIDEO)
 
 
 def force_video_status(session: Session, experiment: Experiment, status: VideoStatus) -> None:

@@ -45,9 +45,9 @@ def produce_short_handler(
         result = produce_short(session, job.experiment_id, non_blocking)
         if result.video_status in _STILL_WORKING:
             raise RetryLater(poll_interval, "provider is still generating")
-        if result.video_status is VideoStatus.GENERATED:
+        if result.video_status is VideoStatus.GENERATED and result.asset_id is not None:
             # Follow-up work is due as of this run's clock (job.started_at).
-            enqueue_qa(session, job.experiment_id, now=job.started_at)
+            enqueue_qa(session, job.experiment_id, result.asset_id, now=job.started_at)
         return {
             "video_status": result.video_status.value,
             "asset_id": str(result.asset_id) if result.asset_id else None,

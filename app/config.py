@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     # provider_models catalogue; set an override to force one model.
     video_model_override: str | None = None
     default_prompt_strategy: str = "single_shot_v1"
+    # Retry policy: attempts per scene (original, repaired prompt, fallback
+    # model) and regenerations after automated QA rejects a video. The budget
+    # governor may stop retries earlier.
+    generation_max_attempts_per_scene: int = 3
+    generation_max_regenerations_after_qa: int = 1
     generation_poll_interval_seconds: float = 5.0
     generation_timeout_seconds: float = 900.0
 

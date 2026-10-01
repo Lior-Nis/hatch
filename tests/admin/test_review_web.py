@@ -11,7 +11,7 @@ from app.experiments.models import Experiment
 from app.experiments.states import VideoStatus
 from app.quality.models import HumanReview, ReviewDecision
 from integrations.object_storage.local import LocalAssetStore
-from tests.factories import make_reviewable_experiment
+from tests.factories import final_asset, make_reviewable_experiment
 
 
 @pytest.fixture
@@ -50,7 +50,7 @@ def test_review_page_shows_video_hypothesis_genome_and_cost(
     response = client.get(f"/review/{experiment.id}")
 
     assert response.status_code == 200
-    asset = experiment.assets[0]
+    asset = final_asset(experiment)
     assert f'src="/assets/{asset.id}/content"' in response.text
     assert "Opening on an unexplained gentle glow" in response.text
     assert "visual_question" in response.text
@@ -58,7 +58,7 @@ def test_review_page_shows_video_hypothesis_genome_and_cost(
 
 
 def test_asset_content_is_served_as_video(client: TestClient, experiment: Experiment) -> None:
-    asset = experiment.assets[0]
+    asset = final_asset(experiment)
 
     response = client.get(f"/assets/{asset.id}/content")
 

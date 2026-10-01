@@ -19,6 +19,13 @@ class AttemptStatus(StrEnum):
     BLOCKED_BUDGET = "blocked_budget"
 
 
+class StepStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
 class AssetKind(StrEnum):
     STORYBOARD = "storyboard"
     REFERENCE_IMAGE = "reference_image"
@@ -27,6 +34,28 @@ class AssetKind(StrEnum):
     FINAL_VIDEO = "final_video"
     THUMBNAIL = "thumbnail"
     QA_ARTIFACT = "qa_artifact"
+
+
+class ProductionStep(Identified, Base):
+    """One node of an experiment's production graph (script, storyboard, each
+    scene, assembly) with its status. The graph is derived deterministically
+    from the genome; these rows are its persisted progress."""
+
+    __tablename__ = "production_steps"
+    __table_args__ = (UniqueConstraint("experiment_id", "key"),)
+
+    experiment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("experiments.id"), index=True)
+    key: Mapped[str] = mapped_column(String(40))
+    kind: Mapped[str] = mapped_column(String(20))
+    position: Mapped[int]
+    status: Mapped[StepStatus] = mapped_column(enum_column(StepStatus), default=StepStatus.PENDING)
+    detail: Mapped[JSONDict] = mapped_column(default=dict)
+    """Step inputs and outputs: scene plan, prompt, produced asset ids."""
+    error: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime | None]
+    finished_at: Mapped[datetime | None]
+
+    experiment: Mapped[Experiment] = relationship()
 
 
 class GenerationAttempt(Evidence, Identified, Base):
@@ -50,6 +79,9 @@ class GenerationAttempt(Evidence, Identified, Base):
 
     experiment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("experiments.id"), index=True)
     attempt_number: Mapped[int]
+    step_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("production_steps.id"))
+    strategy: Mapped[str] = mapped_column(String(40), default="original")
+    """Why this attempt exists: original, prompt_repair, fallback_model, qa_repair."""
     idempotency_key: Mapped[str] = mapped_column(String(200), unique=True)
     provider: Mapped[str] = mapped_column(String(60))
     model: Mapped[str] = mapped_column(String(120))

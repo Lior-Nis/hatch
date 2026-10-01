@@ -10,6 +10,7 @@ from app.experiments.states import VideoStatus
 from app.quality.models import HumanReview, ReviewDecision
 from app.quality.review import ReviewNotAllowed, pending_reviews, submit_review
 from tests.factories import (
+    final_asset,
     make_experiment,
     make_generated_experiment,
     make_reviewable_experiment,
@@ -34,7 +35,7 @@ def test_approval_is_persisted_with_reviewer_reason_and_asset(
     assert stored.decision is ReviewDecision.APPROVE
     assert stored.reason == "Gentle, clear, on-model."
     assert stored.reviewer == "lior"
-    assert stored.asset_id == session.get_one(Experiment, experiment.id).assets[0].id
+    assert stored.asset_id == final_asset(session.get_one(Experiment, experiment.id)).id
     assert stored.created_at.tzinfo is not None
     assert session.get_one(Experiment, experiment.id).video_status is VideoStatus.READY
 

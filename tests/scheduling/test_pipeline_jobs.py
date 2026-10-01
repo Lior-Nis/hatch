@@ -15,15 +15,17 @@ from app.budgets.models import BudgetLedgerEntry
 from app.experiments.models import Experiment
 from app.experiments.states import VideoStatus
 from app.production.jobs import PRODUCE_SHORT, enqueue_production, produce_short_handler
-from app.production.models import Asset, GenerationAttempt
+from app.production.models import Asset, AssetKind, GenerationAttempt
 from app.production.run import ProductionDeps
 from app.quality.jobs import RUN_QA, run_qa_handler
 from app.quality.models import QAResult
+from app.quality.ports import QACandidate, QAOutcome, QAVerdict
 from app.quality.technical import TechnicalQAGate
 from app.scheduling.models import JobRun, JobStatus
 from app.scheduling.queue import claim_next
 from app.scheduling.worker import Worker
 from integrations.fake.media import FakeMediaGenerator
+from integrations.fake.quality import FakeQAGate
 from integrations.object_storage.local import LocalAssetStore
 from tests.factories import LIMITS, make_experiment
 
@@ -136,7 +138,8 @@ def test_replaying_a_successful_job_does_not_duplicate_media_or_charges(
 
     assert len(generator.submitted_requests) == 1
     assert len(session.scalars(select(GenerationAttempt)).all()) == 1
-    assert len(session.scalars(select(Asset)).all()) == 1
+    finals = select(Asset).where(Asset.kind == AssetKind.FINAL_VIDEO)
+    assert len(session.scalars(finals).all()) == 1
     assert len(session.scalars(select(BudgetLedgerEntry)).all()) == 1
     assert len(session.scalars(select(QAResult)).all()) == 1
     assert len(session.scalars(select(JobRun)).all()) == 2
@@ -170,7 +173,7 @@ def test_failed_generation_finishes_the_job_and_skips_qa(
     experiment = make_experiment(session)
     enqueue_production(session, experiment.id, now=clock())
 
-    drain(make_worker(session, tmp_path, FakeMediaGenerator(fail_next=["nsfw"]), clock), clock)
+    drain(make_worker(session, tmp_path, FakeMediaGenerator(fail_next=["nsfw"] * 3), clock), clock)
 
     by_type = jobs(session)
     assert set(by_type) == {PRODUCE_SHORT}
@@ -180,3 +183,91 @@ def test_failed_generation_finishes_the_job_and_skips_qa(
         "asset_id": None,
         "error": "nsfw",
     }
+
+
+class FlakyVisualGate:
+    """Rejects the first video it sees, passes every later one."""
+
+    name = "visual"
+    version = "test-1"
+    mandatory = True
+
+    def __init__(self) -> None:
+        self.seen = 0
+
+    def evaluate(self, candidate: QACandidate) -> QAVerdict:
+        self.seen += 1
+        outcome = QAOutcome.FAIL if self.seen == 1 else QAOutcome.PASS
+        reasons = ("character drifts off-model",) if self.seen == 1 else ()
+        return QAVerdict(
+            gate=self.name, gate_version=self.version, outcome=outcome, reasons=reasons
+        )
+
+
+def test_a_qa_rejected_video_is_regenerated_and_rechecked_through_the_queue(
+    session: Session, tmp_path: Path, clock: Clock
+) -> None:
+    experiment = make_experiment(session)
+    generator = FakeMediaGenerator()
+    store = LocalAssetStore(tmp_path / "assets")
+    deps = ProductionDeps(generator=generator, store=store, governor=BudgetGovernor(LIMITS))
+
+    @contextmanager
+    def sessions() -> Iterator[Session]:
+        yield session
+
+    worker = Worker(
+        sessions,
+        {
+            PRODUCE_SHORT: produce_short_handler(deps, poll_interval=timedelta(seconds=10)),
+            RUN_QA: run_qa_handler(gates=[FlakyVisualGate()], store=store),
+        },
+        worker_id="w1",
+        clock=clock,
+    )
+    enqueue_production(session, experiment.id, now=clock())
+
+    drain(worker, clock)
+
+    session.expire_all()
+    assert session.get_one(Experiment, experiment.id).video_status is VideoStatus.APPROVAL_PENDING
+    assert len(generator.submitted_requests) == 2
+    assert "character drifts off-model" in generator.submitted_requests[1].prompt
+    job_types = sorted(job.job_type for job in session.scalars(select(JobRun)))
+    assert job_types == [PRODUCE_SHORT, PRODUCE_SHORT, RUN_QA, RUN_QA]
+    outcomes = [
+        r.outcome.value for r in session.scalars(select(QAResult).order_by(QAResult.created_at))
+    ]
+    assert outcomes == ["fail", "pass"]
+
+
+def test_a_video_rejected_again_after_regeneration_stays_rejected(
+    session: Session, tmp_path: Path, clock: Clock
+) -> None:
+    experiment = make_experiment(session)
+    generator = FakeMediaGenerator()
+    store = LocalAssetStore(tmp_path / "assets")
+    deps = ProductionDeps(generator=generator, store=store, governor=BudgetGovernor(LIMITS))
+    always_fail = FakeQAGate(name="child_safety", mandatory=True, outcome=QAOutcome.FAIL)
+
+    @contextmanager
+    def sessions() -> Iterator[Session]:
+        yield session
+
+    worker = Worker(
+        sessions,
+        {
+            PRODUCE_SHORT: produce_short_handler(deps, poll_interval=timedelta(seconds=10)),
+            RUN_QA: run_qa_handler(gates=[always_fail], store=store),
+        },
+        worker_id="w1",
+        clock=clock,
+    )
+    enqueue_production(session, experiment.id, now=clock())
+
+    drain(worker, clock)
+
+    session.expire_all()
+    assert session.get_one(Experiment, experiment.id).video_status is VideoStatus.QA_REJECTED
+    assert len(generator.submitted_requests) == 2  # the original and one regeneration
+    assert all(job.status is JobStatus.SUCCEEDED for job in session.scalars(select(JobRun)))

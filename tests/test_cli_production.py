@@ -13,6 +13,7 @@ from app.cli import app
 from app.config import get_settings
 from app.experiments.models import Experiment
 from app.experiments.states import VideoStatus
+from app.production.models import AssetKind
 from app.production.probe import probe_media
 from tests.conftest import TEST_DATABASE_URL
 
@@ -42,7 +43,7 @@ def test_run_fixture_produces_a_playable_short_without_manual_edits(
     with Session(engine) as session:
         experiment = session.scalars(select(Experiment)).one()
         assert experiment.video_status is VideoStatus.APPROVAL_PENDING
-        [asset] = experiment.assets
+        asset = next(a for a in experiment.assets if a.kind is AssetKind.FINAL_VIDEO)
     [stored] = list(cli_env.rglob("*.mp4"))
     assert stored.stat().st_size == asset.size_bytes
     assert probe_media(stored).height > probe_media(stored).width

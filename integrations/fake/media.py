@@ -72,10 +72,12 @@ class FakeMediaGenerator:
         cost_per_second_usd: Decimal = Decimal("0.01"),
         fail_next: list[str] | None = None,
         polls_until_done: int = 0,
+        charge_failures: bool = False,
     ) -> None:
         self._cost_per_second = cost_per_second_usd
         self._fail_next = list(fail_next or [])
         self._polls_until_done = polls_until_done
+        self._charge_failures = charge_failures
         self._polls: dict[str, int] = {}
         self._jobs: dict[str, GenerationJob] = {}
         self._job_by_key: dict[str, str] = {}
@@ -98,7 +100,11 @@ class FakeMediaGenerator:
                 model=request.model,
                 provider_job_id=job_id,
                 state=JobState.FAILED,
-                actual_cost_usd=Decimal("0"),
+                actual_cost_usd=(
+                    self.estimate_cost(request).amount_usd
+                    if self._charge_failures
+                    else Decimal("0")
+                ),
                 error=self._fail_next.pop(0),
             )
         else:

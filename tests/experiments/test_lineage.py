@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.budgets.governor import BudgetGovernor, BudgetLimits
 from app.experiments.fixtures import FIRST_SHORT
 from app.experiments.lineage import ExperimentNotFound, get_lineage
-from app.production.run import ProductionDeps, produce_short
+from app.production.run import ProductionDeps, RetryPolicy, produce_short
 from integrations.fake.media import FakeMediaGenerator
 from integrations.object_storage.local import LocalAssetStore
 from tests.factories import make_experiment
@@ -30,6 +30,7 @@ def produce(session: Session, tmp_path: Path, generator: FakeMediaGenerator) -> 
         governor=BudgetGovernor(LIMITS),
         poll_interval_seconds=0.0,
         sleep=lambda seconds: None,
+        retry=RetryPolicy(max_attempts_per_scene=1),
     )
     produce_short(session, experiment.id, deps)
     session.expire_all()
