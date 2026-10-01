@@ -6,7 +6,7 @@ The only place that knows which vendor implements which port.
 import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import timedelta
+from datetime import time, timedelta
 from decimal import Decimal
 
 import anthropic
@@ -24,6 +24,9 @@ from app.llm.ports import LanguageModel
 from app.production.jobs import PRODUCE_SHORT, produce_short_handler
 from app.production.ports import MediaGenerator
 from app.production.run import ProductionDeps, RetryPolicy
+from app.publishing.jobs import publishing_handlers
+from app.publishing.ports import Publisher
+from app.publishing.schedule import PostingSchedule
 from app.quality.content import ContentReviewer, ContentThresholds, content_gates
 from app.quality.jobs import RUN_QA, GateFactory, run_qa_handler
 from app.quality.ports import QAGate
@@ -31,6 +34,7 @@ from app.quality.technical import TechnicalQAGate
 from app.scheduling.worker import JobHandler
 from app.storage import AssetStore
 from integrations.anthropic.language_model import AnthropicLanguageModel
+from integrations.buffer.publisher import BufferPublisher
 from integrations.fake.media import FakeMediaGenerator
 from integrations.higgsfield.generator import HiggsfieldMediaGenerator
 from integrations.object_storage.local import LocalAssetStore
@@ -101,6 +105,19 @@ def build_media_generator(settings: Settings) -> MediaGenerator:
         api_key=settings.higgsfield_api_key.get_secret_value(),
         api_secret=settings.higgsfield_api_secret.get_secret_value(),
     )
+
+
+def build_publisher(settings: Settings) -> Publisher:
+    if settings.buffer_api_key is None:
+        raise ConfigurationError("The Buffer API key is missing: set HATCH_BUFFER_API_KEY in .env.")
+    return BufferPublisher(api_key=settings.buffer_api_key.get_secret_value())
+
+
+def build_posting_schedule(settings: Settings) -> PostingSchedule:
+    slots = tuple(
+        time.fromisoformat(slot.strip()) for slot in settings.publish_slots_utc.split(",") if slot
+    )
+    return PostingSchedule(slots_utc=slots)
 
 
 def build_language_model(settings: Settings) -> LanguageModel:
@@ -174,6 +191,10 @@ def build_job_handlers(settings: Settings) -> dict[str, JobHandler]:
             max_regenerations=settings.generation_max_regenerations_after_qa,
         ),
     }
+    try:
+        handlers |= publishing_handlers(publisher=build_publisher(settings), store=deps.store)
+    except ConfigurationError as exc:
+        logger.warning("publishing_jobs_disabled", extra={"reason": str(exc)})
     try:
         llm = build_language_model(settings)
     except ConfigurationError as exc:

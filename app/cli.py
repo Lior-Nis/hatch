@@ -9,6 +9,7 @@ from typing import Annotated, NoReturn
 
 import typer
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import __version__
@@ -16,7 +17,9 @@ from app.bootstrap import (
     ConfigurationError,
     build_asset_store,
     build_job_handlers,
+    build_posting_schedule,
     build_production_deps,
+    build_publisher,
     build_qa_gates,
     open_session,
 )
@@ -29,14 +32,20 @@ from app.experiments.models import Experiment
 from app.experiments.service import create_experiment
 from app.experiments.states import VideoStatus
 from app.ips.catalog import INITIAL_IPS, seed_initial_ips
+from app.ips.models import IP
 from app.observability.health import find_stalls, provider_health
 from app.observability.logging import configure_logging
 from app.observability.trace import experiment_timeline, render_timeline
+from app.platforms import Platform
 from app.production.catalog import seed_provider_models
 from app.production.jobs import enqueue_production
 from app.production.models import Asset
 from app.production.routing import load_catalog
 from app.production.run import ProductionDeps, ProductionResult, produce_short
+from app.publishing.jobs import schedule_ready_videos
+from app.publishing.models import PlatformAccount
+from app.publishing.ports import PublisherError
+from app.publishing.service import map_account
 from app.quality.runner import run_quality_gates
 from app.scheduling.models import JobRun, JobStatus
 from app.scheduling.worker import Worker
@@ -241,6 +250,95 @@ def serve(host: str = "127.0.0.1", port: int = 8321) -> None:
     from app.admin.web import create_app
 
     uvicorn.run(create_app(), host=host, port=port)
+
+
+accounts_app = typer.Typer(help="Social accounts: map human-owned accounts to IPs.")
+app.add_typer(accounts_app, name="accounts")
+
+
+@accounts_app.command("channels")
+def accounts_channels() -> None:
+    """List the channels connected in Buffer, with their ids."""
+    try:
+        publisher = build_publisher(get_settings())
+    except ConfigurationError as exc:
+        _fail(str(exc))
+    try:
+        channels = publisher.list_channels()
+    except PublisherError as exc:
+        _fail(str(exc))
+    for channel in channels:
+        mode = "automatic" if channel.automatic else "REMINDERS ONLY — turn off notifications"
+        typer.echo(
+            f"{channel.platform.value:<16} {channel.id}  {channel.name}  "
+            f"native id {channel.external_account_id or '?'}  [{mode}]"
+        )
+
+
+@accounts_app.command("map")
+def accounts_map(
+    ip_slug: str,
+    platform: Platform,
+    channel_id: Annotated[str, typer.Option(help="The publisher's (Buffer) channel id.")],
+    external_account_id: Annotated[
+        str, typer.Option(help="The platform's own account id (channel id, page id, ...).")
+    ],
+    handle: Annotated[str | None, typer.Option(help="Public handle, for display.")] = None,
+) -> None:
+    """Record that an account you own is an IP's presence on a platform."""
+    with open_session(get_settings()) as session:
+        ip = session.scalars(select(IP).where(IP.slug == ip_slug)).one_or_none()
+        if ip is None:
+            _fail(f"no IP with slug {ip_slug} (run `hatch seed-ips` first)")
+        try:
+            map_account(
+                session,
+                ip,
+                platform,
+                external_account_id=external_account_id,
+                publisher_profile_id=channel_id,
+                handle=handle,
+            )
+            session.commit()
+        except IntegrityError:
+            _fail(
+                f"{ip_slug} already has a {platform.value} account, or that account is mapped "
+                "to another IP (one account per IP per platform)"
+            )
+        typer.echo(f"mapped {platform.value} channel {channel_id} to {ip_slug}")
+
+
+@accounts_app.command("list")
+def accounts_list() -> None:
+    """Show which platform accounts each IP has, and which are missing."""
+    with open_session(get_settings()) as session:
+        for ip in session.scalars(select(IP).order_by(IP.slug)):
+            accounts = {
+                account.platform: account
+                for account in session.scalars(
+                    select(PlatformAccount).where(PlatformAccount.ip_id == ip.id)
+                )
+            }
+            typer.echo(f"{ip.slug}:")
+            for platform, account in accounts.items():
+                typer.echo(
+                    f"  {platform.value:<16} {account.handle or '-'}  "
+                    f"channel {account.publisher_profile_id}  [{account.status.value}]"
+                )
+            missing = [p.value for p in Platform if p not in accounts]
+            if missing:
+                typer.echo(f"  missing: {', '.join(missing)}")
+
+
+@app.command("publish-ready")
+def publish_ready() -> None:
+    """Give every approved video its IP's next posting slot and queue it."""
+    settings = get_settings()
+    with open_session(settings) as session:
+        jobs = schedule_ready_videos(session, schedule=build_posting_schedule(settings))
+        for job in jobs:
+            typer.echo(f"experiment {job.experiment_id} → {job.payload['scheduled_at']}")
+        typer.echo(f"{len(jobs)} video(s) queued for publishing")
 
 
 def _production_deps(settings: Settings) -> ProductionDeps:

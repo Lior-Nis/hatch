@@ -60,6 +60,9 @@ class Settings(BaseSettings):
 
     # Publishing (Buffer GraphQL API).
     buffer_api_key: SecretStr | None = None
+    # Daily posting slots per IP, UTC, comma-separated HH:MM. Two slots is the
+    # PRD cadence of two videos per IP per day.
+    publish_slots_utc: str = "15:00,21:00"
 
     # Language model for creative agents and content QA (Claude API).
     anthropic_api_key: SecretStr | None = None

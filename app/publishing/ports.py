@@ -15,7 +15,17 @@ from app.platforms import Platform
 
 
 class PublishTargetError(Exception):
-    """The target account is not connected to / permitted for this publisher."""
+    """The publisher definitively refused the post (account not connected,
+    invalid input, media not fetchable). Nothing was published."""
+
+
+class PublisherError(Exception):
+    """The publisher could not be reached or answered unexpectedly. Whether
+    anything was written is unknown; a retry must look before it creates."""
+
+    def __init__(self, message: str, *, retryable: bool = True) -> None:
+        self.retryable = retryable
+        super().__init__(message)
 
 
 class PublicationState(StrEnum):

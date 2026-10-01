@@ -32,6 +32,13 @@ Background mode (durable queue in Postgres; survives restarts):
     uv run hatch worker                                  # run queued jobs (generation → QA)
     uv run hatch jobs                                    # status, attempts, timing per job
 
+Publishing (needs a Buffer API key, a public media bucket and mapped accounts):
+
+    uv run hatch accounts channels                       # Buffer channels and their ids
+    uv run hatch accounts map <ip> <platform> --channel-id … --external-account-id …
+    uv run hatch accounts list                           # which accounts each IP has / lacks
+    uv run hatch publish-ready                           # give approved videos their next posting slot
+
 Operations:
 
     uv run hatch trace <experiment_id>                   # everything that happened, in order
