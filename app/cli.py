@@ -21,6 +21,7 @@ from app.bootstrap import (
     ConfigurationError,
     build_asset_store,
     build_job_handlers,
+    build_language_model,
     build_posting_schedule,
     build_production_deps,
     build_publisher,
@@ -31,6 +32,10 @@ from app.bootstrap import (
 from app.budgets.reports import spend_report
 from app.config import Settings, get_settings
 from app.db import make_engine, utcnow
+from app.evolution.cycle import evolve_ip
+from app.evolution.jobs import EVOLUTION_CYCLE
+from app.evolution.models import SelectionDecision
+from app.evolution.policy import EvolutionPolicy
 from app.experiments.fixtures import FIRST_SHORT
 from app.experiments.lineage import ExperimentNotFound, get_lineage
 from app.experiments.models import Experiment
@@ -47,12 +52,13 @@ from app.production.jobs import enqueue_production
 from app.production.models import Asset
 from app.production.routing import load_catalog
 from app.production.run import ProductionDeps, ProductionResult, produce_short
-from app.publishing.jobs import schedule_ready_videos
+from app.publishing.jobs import PUBLISHING_CYCLE, schedule_ready_videos
 from app.publishing.models import PlatformAccount
 from app.publishing.ports import PublisherError
 from app.publishing.service import map_account
 from app.quality.runner import run_quality_gates
 from app.scheduling.models import JobRun, JobStatus
+from app.scheduling.recurring import ensure_recurring
 from app.scheduling.worker import Worker
 from integrations.meta.auth import store_page_tokens
 from integrations.tiktok.auth import exchange_tiktok_code, tiktok_authorize_url
@@ -140,6 +146,21 @@ def worker(
     except ConfigurationError as exc:
         _fail(str(exc))
     engine = make_engine(settings.database_url)
+    with Session(engine) as session:
+        # Recurring cycles keep the loop turning without anyone asking.
+        if EVOLUTION_CYCLE in handlers:
+            ensure_recurring(
+                session,
+                EVOLUTION_CYCLE,
+                interval=timedelta(hours=settings.evolution_interval_hours),
+            )
+        if PUBLISHING_CYCLE in handlers:
+            ensure_recurring(
+                session,
+                PUBLISHING_CYCLE,
+                interval=timedelta(minutes=settings.publishing_cycle_minutes),
+            )
+        session.commit()
     job_worker = Worker(
         lambda: Session(engine, expire_on_commit=False),
         handlers,
@@ -156,6 +177,53 @@ def worker(
         typer.echo("worker stopped")
     finally:
         engine.dispose()
+
+
+@app.command()
+def evolve(
+    ip_slug: Annotated[str | None, typer.Argument(help="One IP; all IPs when omitted.")] = None,
+) -> None:
+    """Run one evolution cycle now: verdicts, replication requests, IP
+    lifecycle, and the next experiments. Creative jobs are queued for the worker."""
+    settings = get_settings()
+    try:
+        build_language_model(settings)
+    except ConfigurationError as exc:
+        # Planning without a creative agent would only queue jobs that fail.
+        _fail(f"evolution needs the creative agent. {exc}")
+    with open_session(settings) as session:
+        query = select(IP).order_by(IP.slug)
+        if ip_slug is not None:
+            query = query.where(IP.slug == ip_slug)
+        ips = session.scalars(query).all()
+        if not ips:
+            _fail("no matching IP (run `hatch seed-ips` first)")
+        for ip in ips:
+            report = evolve_ip(
+                session, ip, EvolutionPolicy(), pipeline_target=settings.pipeline_target_per_ip
+            )
+            typer.echo(
+                f"{ip.slug} [{ip.status.value}]: {report.conclusions} concluded, "
+                f"{report.replication_requests} replication request(s), "
+                f"{report.lifecycle_transitions} lifecycle change(s), {report.planned} planned "
+                f"({report.in_pipeline} already in the pipeline)"
+            )
+
+
+@app.command()
+def decisions(
+    limit: Annotated[int, typer.Option(help="Maximum number of decisions to show.")] = 20,
+) -> None:
+    """Recent selection decisions with their reasons, newest first."""
+    with open_session(get_settings()) as session:
+        for decision in session.scalars(
+            select(SelectionDecision).order_by(SelectionDecision.created_at.desc()).limit(limit)
+        ):
+            bucket = f" [{decision.bucket.value}]" if decision.bucket else ""
+            typer.echo(
+                f"{decision.created_at:%Y-%m-%d %H:%M} {decision.decision_type.value}{bucket} "
+                f"{decision.ip.slug if decision.ip else '-'}: {decision.reason}"
+            )
 
 
 @app.command()

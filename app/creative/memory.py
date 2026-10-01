@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.creative.genome import GENE_SPECS, GeneGroup, GeneKind
-from app.experiments.models import Experiment
+from app.experiments.models import Experiment, Hypothesis
 from app.fitness.models import FitnessScope
 from app.ips.models import IP
 from app.knowledge.models import KnowledgeSummary
@@ -83,4 +83,24 @@ def knowledge_for(session: Session, ip: IP) -> list[dict[str, Any]]:
     )
     return [
         {"topic": s.topic, "statement": s.statement, "confidence": s.confidence} for s in summaries
+    ]
+
+
+def untested_starting_hypotheses(session: Session, ip: IP) -> list[dict[str, Any]]:
+    """The IP's seeded hypotheses that no experiment has taken up yet."""
+    tested = set(
+        session.scalars(
+            select(Hypothesis.statement)
+            .join(Experiment, Experiment.hypothesis_id == Hypothesis.id)
+            .where(Experiment.ip_id == ip.id)
+        )
+    )
+    return [
+        {"statement": h.statement, "rationale": h.rationale, "prediction": h.prediction}
+        for h in session.scalars(
+            select(Hypothesis)
+            .where(Hypothesis.ip_id == ip.id, Hypothesis.source == "initial_portfolio")
+            .order_by(Hypothesis.created_at)
+        )
+        if h.statement not in tested
     ]

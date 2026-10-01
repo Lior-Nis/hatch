@@ -84,6 +84,8 @@ class SelectionDecision(Evidence, Identified, Base):
     something — with the evidence it used, in machine-readable form."""
 
     __tablename__ = "selection_decisions"
+    # Set once, when the candidate a decision asked for has been created.
+    __mutable_columns__ = frozenset({"resulting_experiment_id"})
 
     decision_type: Mapped[DecisionType] = mapped_column(enum_column(DecisionType))
     bucket: Mapped[AllocationBucket | None] = mapped_column(enum_column(AllocationBucket))

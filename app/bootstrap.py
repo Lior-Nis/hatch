@@ -20,6 +20,8 @@ from app.creative.candidates import routed_production
 from app.creative.jobs import creative_handlers
 from app.db import make_engine, registry
 from app.evolution.anti_cloning import AntiCloningPolicy
+from app.evolution.jobs import evolution_handlers
+from app.evolution.policy import EvolutionPolicy
 from app.experiments.spec import OutputRequirements
 from app.fitness.heuristic import HeuristicFitnessEvaluator
 from app.fitness.jobs import fitness_handlers
@@ -238,7 +240,12 @@ def build_job_handlers(settings: Settings) -> dict[str, JobHandler]:
         HeuristicFitnessEvaluator(), target_cost_usd=settings.budget_target_per_video_usd
     )
     try:
-        handlers |= publishing_handlers(publisher=build_publisher(settings), store=deps.store)
+        handlers |= publishing_handlers(
+            publisher=build_publisher(settings),
+            store=deps.store,
+            schedule=build_posting_schedule(settings),
+            cycle_interval=timedelta(minutes=settings.publishing_cycle_minutes),
+        )
     except ConfigurationError as exc:
         logger.warning("publishing_jobs_disabled", extra={"reason": str(exc)})
     try:
@@ -259,5 +266,12 @@ def build_job_handlers(settings: Settings) -> dict[str, JobHandler]:
                 override=settings.video_model_override,
             ),
             policy=AntiCloningPolicy(max_surface_similarity=settings.anti_cloning_max_similarity),
+        )
+        # The evolution cycle orders candidates from the creative agent, so it
+        # only runs when that agent can actually work.
+        handlers |= evolution_handlers(
+            EvolutionPolicy(),
+            pipeline_target=settings.pipeline_target_per_ip,
+            interval=timedelta(hours=settings.evolution_interval_hours),
         )
     return handlers

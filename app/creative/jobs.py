@@ -9,10 +9,12 @@ from app.budgets.governor import BudgetExceeded, BudgetGovernor
 from app.creative.candidates import (
     Planner,
     ProductionDefaults,
+    propose_exploit,
     propose_mutation,
     propose_novel,
 )
 from app.evolution.anti_cloning import AntiCloningPolicy
+from app.evolution.models import ParentRelation, SelectionDecision
 from app.experiments.models import Experiment
 from app.experiments.spec import OutputRequirements
 from app.ips.models import IP
@@ -24,6 +26,11 @@ from app.scheduling.worker import JobHandler, JobResult, PermanentJobError
 
 PROPOSE_NOVEL = "propose_novel"
 PROPOSE_MUTATION = "propose_mutation"
+PROPOSE_EXPLOIT = "propose_exploit"
+
+
+def _key(decision_id: uuid.UUID | None, idempotency_key: str | None) -> str | None:
+    return f"create_experiment:{decision_id}" if decision_id else idempotency_key
 
 
 def enqueue_novel_proposal(
@@ -31,14 +38,19 @@ def enqueue_novel_proposal(
     ip_id: uuid.UUID,
     *,
     produce: bool = False,
+    decision_id: uuid.UUID | None = None,
     idempotency_key: str | None = None,
     now: datetime | None = None,
 ) -> JobRun:
     return enqueue(
         session,
         PROPOSE_NOVEL,
-        payload={"ip_id": str(ip_id), "produce": produce},
-        idempotency_key=idempotency_key,
+        payload={
+            "ip_id": str(ip_id),
+            "produce": produce,
+            "decision_id": str(decision_id) if decision_id else None,
+        },
+        idempotency_key=_key(decision_id, idempotency_key),
         now=now,
     )
 
@@ -48,20 +60,55 @@ def enqueue_mutation_proposal(
     parent_experiment_id: uuid.UUID,
     *,
     produce: bool = False,
+    decision_id: uuid.UUID | None = None,
     idempotency_key: str | None = None,
     now: datetime | None = None,
 ) -> JobRun:
     return enqueue(
         session,
         PROPOSE_MUTATION,
-        payload={"parent_experiment_id": str(parent_experiment_id), "produce": produce},
-        idempotency_key=idempotency_key,
+        payload={
+            "parent_experiment_id": str(parent_experiment_id),
+            "produce": produce,
+            "decision_id": str(decision_id) if decision_id else None,
+        },
+        idempotency_key=_key(decision_id, idempotency_key),
+        now=now,
+    )
+
+
+def enqueue_exploit_proposal(
+    session: Session,
+    parent_experiment_id: uuid.UUID,
+    *,
+    relation: ParentRelation = ParentRelation.EXPLOIT,
+    produce: bool = False,
+    decision_id: uuid.UUID | None = None,
+    idempotency_key: str | None = None,
+    now: datetime | None = None,
+) -> JobRun:
+    """Same mechanism, new story: an exploit of a proven lineage or a
+    replication descendant of a potential winner."""
+    return enqueue(
+        session,
+        PROPOSE_EXPLOIT,
+        payload={
+            "parent_experiment_id": str(parent_experiment_id),
+            "relation": relation.value,
+            "produce": produce,
+            "decision_id": str(decision_id) if decision_id else None,
+        },
+        idempotency_key=_key(decision_id, idempotency_key),
         now=now,
     )
 
 
 def _finish(session: Session, job: JobRun, candidate: Experiment) -> JobResult:
     job.experiment_id = candidate.id
+    if job.payload.get("decision_id"):
+        # The decision that asked for this candidate now points at it.
+        decision = session.get_one(SelectionDecision, uuid.UUID(job.payload["decision_id"]))
+        decision.resulting_experiment_id = candidate.id
     if job.payload.get("produce"):
         enqueue_production(session, candidate.id, now=job.started_at)
     return {"experiment_id": str(candidate.id)}
@@ -108,4 +155,20 @@ def creative_handlers(
         candidate = propose_mutation(session, parent, llm=llm, governor=governor, policy=policy)
         return _finish(session, job, candidate)
 
-    return {PROPOSE_NOVEL: guarded(novel), PROPOSE_MUTATION: guarded(mutation)}
+    def exploit(session: Session, job: JobRun) -> JobResult:
+        parent = session.get_one(Experiment, uuid.UUID(job.payload["parent_experiment_id"]))
+        candidate = propose_exploit(
+            session,
+            parent,
+            llm=llm,
+            governor=governor,
+            policy=policy,
+            relation=ParentRelation(job.payload.get("relation", ParentRelation.EXPLOIT.value)),
+        )
+        return _finish(session, job, candidate)
+
+    return {
+        PROPOSE_NOVEL: guarded(novel),
+        PROPOSE_MUTATION: guarded(mutation),
+        PROPOSE_EXPLOIT: guarded(exploit),
+    }

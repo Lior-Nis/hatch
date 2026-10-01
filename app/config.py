@@ -79,6 +79,12 @@ class Settings(BaseSettings):
     llm_model: str = "claude-opus-5-5"
     llm_effort: Literal["low", "medium", "high", "xhigh", "max"] = "high"
 
+    # Evolution cycle: how often each IP is re-evaluated and how many videos
+    # are kept on their way to publication per IP (2 = one day at 2 per day).
+    evolution_interval_hours: float = 6.0
+    pipeline_target_per_ip: int = 2
+    publishing_cycle_minutes: float = 30.0
+
     # Anti-cloning: a candidate whose story is at least this similar (0–1) to
     # an existing one in the same IP is rejected.
     anti_cloning_max_similarity: float = 0.6

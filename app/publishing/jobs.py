@@ -28,6 +28,7 @@ from app.publishing.service import (
 )
 from app.scheduling.models import JobRun
 from app.scheduling.queue import enqueue
+from app.scheduling.recurring import ensure_recurring
 from app.scheduling.worker import JobHandler, JobResult, PermanentJobError, RetryLater
 from app.storage import AssetNotPublic, AssetStore
 
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 PUBLISH_VIDEO = "publish_video"
 REFRESH_PUBLICATIONS = "refresh_publications"
+PUBLISHING_CYCLE = "publishing_cycle"
 
 # How long after the posting time the first status check happens.
 _FIRST_CHECK_AFTER = timedelta(minutes=2)
@@ -104,7 +106,12 @@ def schedule_ready_videos(
 
 
 def publishing_handlers(
-    *, publisher: Publisher, store: AssetStore, poll_interval: timedelta = timedelta(minutes=15)
+    *,
+    publisher: Publisher,
+    store: AssetStore,
+    poll_interval: timedelta = timedelta(minutes=15),
+    schedule: PostingSchedule | None = None,
+    cycle_interval: timedelta = timedelta(minutes=30),
 ) -> dict[str, JobHandler]:
     def publish(session: Session, job: JobRun) -> JobResult:
         if job.experiment_id is None:
@@ -145,4 +152,15 @@ def publishing_handlers(
             raise RetryLater(poll_interval, "waiting for platforms to publish")
         return {"publications": {p.platform.value: p.status.value for p in publications}}
 
-    return {PUBLISH_VIDEO: publish, REFRESH_PUBLICATIONS: refresh}
+    def cycle(session: Session, job: JobRun) -> JobResult:
+        """Give newly approved videos their posting slots, then make sure the
+        next cycle exists."""
+        now = job.started_at
+        assert now is not None
+        queued = schedule_ready_videos(session, now=now, schedule=schedule)
+        ensure_recurring(
+            session, PUBLISHING_CYCLE, interval=cycle_interval, now=now + cycle_interval
+        )
+        return {"queued": len(queued)}
+
+    return {PUBLISH_VIDEO: publish, REFRESH_PUBLICATIONS: refresh, PUBLISHING_CYCLE: cycle}

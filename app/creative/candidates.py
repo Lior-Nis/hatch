@@ -40,6 +40,7 @@ from app.creative.memory import (
     gene_usage,
     ip_experiments,
     knowledge_for,
+    untested_starting_hypotheses,
 )
 from app.evolution.anti_cloning import AntiCloningPolicy, check_clone
 from app.evolution.models import ParentRelation
@@ -216,9 +217,12 @@ def _json(value: Any) -> str:
 
 def _context(session: Session, ip: IP) -> tuple[str, list[Experiment]]:
     experiments = ip_experiments(session, ip)
+    untested = untested_starting_hypotheses(session, ip)
     sections = [
         "## The IP",
         _json(describe_ip(ip)),
+        "## Starting hypotheses for this IP that no experiment has tested yet",
+        _json(untested) if untested else "None left.",
         "## What has been tried in this IP (newest first)",
         _json([describe_experiment(e, with_spec=False) for e in experiments]),
         "## Gene values used so far (value: times used)",

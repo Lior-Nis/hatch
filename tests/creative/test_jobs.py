@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.budgets.governor import BudgetGovernor
 from app.creative.jobs import (
+    PROPOSE_EXPLOIT,
     PROPOSE_MUTATION,
     PROPOSE_NOVEL,
     creative_handlers,
@@ -97,4 +98,4 @@ def test_job_types_are_registered() -> None:
         output=FIRST_SHORT.output,
         production=DEFAULTS,
     )
-    assert set(handlers) == {PROPOSE_NOVEL, PROPOSE_MUTATION}
+    assert set(handlers) == {PROPOSE_NOVEL, PROPOSE_MUTATION, PROPOSE_EXPLOIT}

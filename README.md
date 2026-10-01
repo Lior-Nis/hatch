@@ -39,6 +39,11 @@ Publishing (needs a Buffer API key, a public media bucket and mapped accounts):
     uv run hatch accounts list                           # which accounts each IP has / lacks
     uv run hatch publish-ready                           # give approved videos their next posting slot
 
+Evolution (needs the Anthropic key; runs by itself every 6 hours while a worker is up):
+
+    uv run hatch evolve [ip-slug]                        # run one cycle now
+    uv run hatch decisions                               # what was decided and why
+
 Operations:
 
     uv run hatch trace <experiment_id>                   # everything that happened, in order
