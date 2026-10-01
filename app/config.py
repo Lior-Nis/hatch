@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     )
 
     env: str = "development"
+    log_level: str = "INFO"
+    log_format: Literal["json", "text"] = "json"
     database_url: str = "postgresql+psycopg://hatch:hatch@localhost:54329/hatch"
 
     # Generated media. "local" keeps files under asset_dir; "s3" uses any

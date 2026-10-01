@@ -28,6 +28,9 @@ from app.experiments.lineage import ExperimentNotFound, get_lineage
 from app.experiments.models import Experiment
 from app.experiments.service import create_experiment
 from app.experiments.states import VideoStatus
+from app.observability.health import find_stalls, provider_health
+from app.observability.logging import configure_logging
+from app.observability.trace import experiment_timeline, render_timeline
 from app.production.jobs import enqueue_production
 from app.production.models import Asset
 from app.production.run import ProductionDeps, ProductionResult, produce_short
@@ -41,6 +44,8 @@ app = typer.Typer(help="Hatch — evolutionary kids' media studio.", no_args_is_
 @app.callback()
 def main() -> None:
     """Hatch — evolutionary kids' media studio."""
+    settings = get_settings()
+    configure_logging(level=settings.log_level, json_format=settings.log_format == "json")
 
 
 @app.command()
@@ -161,6 +166,47 @@ def costs(days: Annotated[int, typer.Option(help="Report window in days.")] = 30
     since = utcnow() - timedelta(days=days)
     with open_session(get_settings()) as session:
         typer.echo(spend_report(session, since=since).model_dump_json(indent=2))
+
+
+@app.command()
+def trace(experiment_id: uuid.UUID) -> None:
+    """Show everything that happened to an experiment, in order."""
+    with open_session(get_settings()) as session:
+        try:
+            typer.echo(render_timeline(experiment_timeline(session, experiment_id)))
+        except ExperimentNotFound:
+            _fail(f"no experiment with id {experiment_id}")
+
+
+@app.command()
+def health() -> None:
+    """Provider reliability, failed jobs and stalled work. Exits 1 on problems."""
+    with open_session(get_settings()) as session:
+        typer.echo("providers:")
+        for provider in provider_health(session):
+            rate = f"{provider.failure_rate:.0%}" if provider.failure_rate is not None else "n/a"
+            typer.echo(
+                f"  {provider.provider} {provider.model}: {provider.succeeded} ok, "
+                f"{provider.failed} failed ({rate}), {provider.in_flight} in flight, "
+                f"{provider.blocked_by_budget} blocked by budget"
+            )
+            if provider.last_error:
+                typer.echo(f"    last error: {provider.last_error}")
+        failed_jobs = session.scalars(
+            select(JobRun).where(JobRun.status == JobStatus.FAILED).order_by(JobRun.created_at)
+        ).all()
+        typer.echo(f"failed jobs: {len(failed_jobs)}")
+        for job in failed_jobs:
+            typer.echo(f"  {job.job_type} {job.id} experiment={job.experiment_id}: {job.error}")
+        stalls = find_stalls(session)
+        typer.echo(f"stalls: {len(stalls)}")
+        for stall in stalls:
+            subject = stall.experiment_id or stall.job_id
+            typer.echo(
+                f"  {stall.kind} {subject} since {stall.since:%Y-%m-%d %H:%M}: {stall.detail}"
+            )
+        if failed_jobs or stalls:
+            raise typer.Exit(code=1)
 
 
 @app.command()

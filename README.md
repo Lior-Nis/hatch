@@ -32,6 +32,13 @@ Background mode (durable queue in Postgres; survives restarts):
     uv run hatch worker                                  # run queued jobs (generation → QA)
     uv run hatch jobs                                    # status, attempts, timing per job
 
+Operations:
+
+    uv run hatch trace <experiment_id>                   # everything that happened, in order
+    uv run hatch health                                  # provider failures, failed jobs, stalls (exit 1 on problems)
+
+Logs are JSON lines on stderr (`HATCH_LOG_FORMAT=text` for plain text).
+
 Every paid call is priced first and must pass the budget governor
 (per-generation, per-video, rolling 24h, rolling 30 days). A blocked attempt is
 recorded and no provider call is made.

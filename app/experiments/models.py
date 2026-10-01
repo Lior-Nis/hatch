@@ -6,12 +6,13 @@ append-only children (attempts, assets, QA results, publications, ledger rows).
 """
 
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
-from app.db import Base, Evidence, Identified, JSONDict, enum_column
+from app.db import Base, Evidence, Identified, JSONDict, enum_column, utcnow
 from app.experiments.states import (
     EXPERIMENT_LIFECYCLE,
     VIDEO_LIFECYCLE,
@@ -62,7 +63,9 @@ class Experiment(Evidence, Identified, Base):
     """One candidate video testing one hypothesis with one genome."""
 
     __tablename__ = "experiments"
-    __mutable_columns__ = frozenset({"status", "video_status", "conclusion"})
+    __mutable_columns__ = frozenset(
+        {"status", "video_status", "video_status_changed_at", "conclusion"}
+    )
 
     ip_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ips.id"), index=True)
     hypothesis_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("hypotheses.id"))
@@ -79,6 +82,8 @@ class Experiment(Evidence, Identified, Base):
     video_status: Mapped[VideoStatus] = mapped_column(
         enum_column(VideoStatus), default=VideoStatus.PROPOSED
     )
+    video_status_changed_at: Mapped[datetime] = mapped_column(default=utcnow)
+    """When the video last changed state; used to detect stalled pipelines."""
     conclusion: Mapped[ExperimentConclusion | None] = mapped_column(
         enum_column(ExperimentConclusion)
     )
@@ -131,7 +136,10 @@ class Experiment(Evidence, Identified, Base):
 
     @validates("video_status")
     def _check_video_status(self, _key: str, target: VideoStatus) -> VideoStatus:
-        return VIDEO_LIFECYCLE.validate_assignment(self.video_status, target)
+        validated = VIDEO_LIFECYCLE.validate_assignment(self.video_status, target)
+        if self.video_status is not None and validated != self.video_status:
+            self.video_status_changed_at = utcnow()
+        return validated
 
     def conclude(self, conclusion: ExperimentConclusion) -> None:
         """Close the experiment with its verdict. A conclusion is final."""
