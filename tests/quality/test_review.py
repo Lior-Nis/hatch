@@ -8,7 +8,11 @@ from app.experiments.lineage import get_lineage
 from app.experiments.models import Experiment
 from app.experiments.states import VideoStatus
 from app.quality.models import HumanReview, ReviewDecision
+from app.quality.ports import QAOutcome
 from app.quality.review import ReviewNotAllowed, pending_reviews, submit_review
+from app.quality.runner import run_quality_gates
+from integrations.fake.quality import FakeQAGate
+from integrations.object_storage.local import LocalAssetStore
 from tests.factories import (
     final_asset,
     make_experiment,
@@ -114,3 +118,78 @@ def test_review_decisions_appear_in_the_lineage(session: Session, tmp_path: Path
     [review] = get_lineage(session, experiment.id).human_reviews
 
     assert (review.decision, review.reason, review.reviewer) == ("reject", "Too dark.", "lior")
+
+
+# --- escalations and flags ---------------------------------------------------
+
+
+def escalated_experiment(session: Session, tmp_path: Path) -> Experiment:
+    store = LocalAssetStore(tmp_path / "assets")
+    experiment = make_generated_experiment(session, tmp_path, store=store)
+    lookalike = FakeQAGate(
+        name="ip_brand", mandatory=True, outcome=QAOutcome.ESCALATE, reasons=["resembles Sonic"]
+    )
+    run_quality_gates(session, experiment.id, gates=[lookalike], store=store)
+    session.expire_all()
+    return experiment
+
+
+def test_approving_an_escalated_video_requires_a_written_resolution(
+    session: Session, tmp_path: Path
+) -> None:
+    experiment = escalated_experiment(session, tmp_path)
+
+    with pytest.raises(ValueError, match="escalat"):
+        submit_review(
+            session, experiment.id, decision=ReviewDecision.APPROVE, reason="", reviewer="lior"
+        )
+    assert session.get_one(Experiment, experiment.id).video_status is VideoStatus.APPROVAL_PENDING
+
+    submit_review(
+        session,
+        experiment.id,
+        decision=ReviewDecision.APPROVE,
+        reason="Checked side by side: silhouette and colours are clearly different.",
+        reviewer="lior",
+    )
+    assert session.get_one(Experiment, experiment.id).video_status is VideoStatus.READY
+
+
+def test_flagging_keeps_the_video_pending_and_records_why(session: Session, tmp_path: Path) -> None:
+    experiment = make_reviewable_experiment(session, tmp_path)
+
+    review = submit_review(
+        session,
+        experiment.id,
+        decision=ReviewDecision.FLAG,
+        reason="Unsure about the music; want a second look.",
+        reviewer="lior",
+    )
+
+    assert review.decision is ReviewDecision.FLAG
+    assert session.get_one(Experiment, experiment.id).video_status is VideoStatus.APPROVAL_PENDING
+    assert [e.id for e in pending_reviews(session)] == [experiment.id]
+
+
+def test_a_flag_needs_a_reason_and_can_be_followed_by_a_decision(
+    session: Session, tmp_path: Path
+) -> None:
+    experiment = make_reviewable_experiment(session, tmp_path)
+
+    with pytest.raises(ValueError, match="reason"):
+        submit_review(
+            session, experiment.id, decision=ReviewDecision.FLAG, reason="", reviewer="lior"
+        )
+    submit_review(
+        session, experiment.id, decision=ReviewDecision.FLAG, reason="Check audio.", reviewer="lior"
+    )
+    submit_review(
+        session, experiment.id, decision=ReviewDecision.APPROVE, reason="Audio is fine.",
+        reviewer="lior",
+    )  # fmt: skip
+
+    decisions = [
+        r.decision for r in session.scalars(select(HumanReview).order_by(HumanReview.created_at))
+    ]
+    assert decisions == [ReviewDecision.FLAG, ReviewDecision.APPROVE]
+    assert session.get_one(Experiment, experiment.id).video_status is VideoStatus.READY

@@ -5,7 +5,7 @@ Every call reserves its estimated cost first, is stored as a ``ModelCall``
 """
 
 import uuid
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -84,3 +84,22 @@ def attribute_to_experiment(
         if call.ledger_entry is not None:
             call.ledger_entry.experiment_id = experiment.id
     session.flush()
+
+
+def bound_caller[T: BaseModel](
+    session: Session, llm: LanguageModel, governor: BudgetGovernor
+) -> Callable[[LLMRequest, type[T], str | None], T]:
+    """A plain ``(request, schema, experiment_id) → parsed`` function for code
+    that should not know about sessions or budgets (e.g. QA gates)."""
+
+    def call(request: LLMRequest, schema: type[T], experiment_id: str | None) -> T:
+        return call_model(
+            session,
+            llm,
+            governor,
+            request,
+            schema,
+            experiment_id=uuid.UUID(experiment_id) if experiment_id else None,
+        ).parsed
+
+    return call

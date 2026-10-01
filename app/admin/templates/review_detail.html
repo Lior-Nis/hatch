@@ -15,14 +15,28 @@
     <p class="muted">No video has been generated for this experiment.</p>
     {% endif %}
 
+    {% if escalations %}
+    <div class="escalation">
+      <strong>Needs your judgement.</strong> Automated QA could not clear this video:
+      <ul>
+        {% for result in escalations %}{% for reason in result.reasons %}
+        <li><strong>{{ result.gate }}</strong>: {{ reason }}</li>
+        {% endfor %}{% endfor %}
+      </ul>
+      Approving requires a reason that says how each point was resolved.
+    </div>
+    {% endif %}
+
     {% if reviewable %}
     <form method="post" action="/review/{{ lineage.experiment.id }}">
-      <label for="reason"><strong>Reason</strong> <span class="muted">(required to reject)</span></label>
+      <label for="reason"><strong>Reason</strong>
+        <span class="muted">(required to reject or flag{% if escalations %}, and to approve this video{% endif %})</span></label>
       {% if error %}<p class="error">{{ error }}</p>{% endif %}
       <textarea id="reason" name="reason"></textarea>
       <div class="actions">
         <button class="approve" type="submit" name="decision" value="approve">Approve</button>
         <button class="reject" type="submit" name="decision" value="reject">Reject</button>
+        <button type="submit" name="decision" value="flag">Flag for later</button>
       </div>
     </form>
     {% elif error %}
@@ -60,12 +74,13 @@
     </table>
 
     <h2>Automated QA</h2>
-    {% if lineage.qa_results %}
+    {% if qa_results %}
     <table>
-      {% for result in lineage.qa_results %}
+      {% for result in qa_results %}
       <tr>
         <th>{{ result.gate }}{% if result.mandatory %} <span class="muted">(mandatory)</span>{% endif %}</th>
-        <td><span class="tag {{ result.outcome }}">{{ result.outcome }}</span> {{ result.reasons | join("; ") }}</td>
+        <td><span class="tag {{ result.outcome }}">{{ result.outcome }}</span> {{ result.reasons | join("; ") }}
+          {% if result.scores %}<br><span class="muted">{% for name, value in result.scores.items() %}{{ name }} {{ "%.2f" | format(value) }}{% if not loop.last %} · {% endif %}{% endfor %}</span>{% endif %}</td>
       </tr>
       {% endfor %}
     </table>

@@ -7,12 +7,13 @@ policy decline is retried on a fallback model inside the same call; the cost is
 priced by the model that actually answered.
 """
 
+import base64
 import math
 from decimal import Decimal
 from typing import Literal
 
 import anthropic
-from anthropic.types.beta import BetaOutputConfigParam
+from anthropic.types.beta import BetaImageBlockParam, BetaOutputConfigParam, BetaTextBlockParam
 from pydantic import BaseModel, ValidationError
 
 from app.llm.ports import LLMError, LLMRefused, LLMRequest, LLMResult, LLMUsage
@@ -31,6 +32,34 @@ _PRICES: dict[str, tuple[Decimal, Decimal]] = {
 }
 _MILLION = Decimal("1000000")
 _FALLBACK_BETA = "server-side-fallback-2026-07-01"
+
+
+# Upper bound for one image (Claude bills roughly width × height / 750 tokens).
+_TOKENS_PER_IMAGE = 1600
+_MEDIA_TYPES: dict[str, Literal["image/jpeg", "image/png"]] = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+}
+
+
+def _content(request: LLMRequest) -> str | list[BetaImageBlockParam | BetaTextBlockParam]:
+    """Plain text, or image blocks followed by the text when images are attached."""
+    if not request.images:
+        return request.prompt
+    blocks: list[BetaImageBlockParam | BetaTextBlockParam] = [
+        BetaImageBlockParam(
+            type="image",
+            source={
+                "type": "base64",
+                "media_type": _MEDIA_TYPES[image.suffix.lower()],
+                "data": base64.standard_b64encode(image.read_bytes()).decode("ascii"),
+            },
+        )
+        for image in request.images
+    ]
+    blocks.append(BetaTextBlockParam(type="text", text=request.prompt))
+    return blocks
 
 
 def _cost(model: str, input_tokens: int, output_tokens: int, default: str) -> Decimal:
@@ -57,6 +86,7 @@ class AnthropicLanguageModel:
     def estimate_cost(self, request: LLMRequest) -> Decimal:
         # Conservative: ~3 characters per token in, and the full output cap out.
         input_tokens = math.ceil(len(request.system + request.prompt) / 3)
+        input_tokens += _TOKENS_PER_IMAGE * len(request.images)
         return _cost(self.model, input_tokens, request.max_output_tokens, self.model)
 
     def generate[T: BaseModel](self, request: LLMRequest, schema: type[T]) -> LLMResult[T]:
@@ -65,7 +95,7 @@ class AnthropicLanguageModel:
                 model=self.model,
                 max_tokens=request.max_output_tokens,
                 system=request.system,
-                messages=[{"role": "user", "content": request.prompt}],
+                messages=[{"role": "user", "content": _content(request)}],
                 output_format=schema,
                 output_config=BetaOutputConfigParam(effort=self._effort),
                 betas=[_FALLBACK_BETA],

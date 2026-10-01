@@ -32,6 +32,8 @@ class QAResult(Evidence, Identified, Base):
 class ReviewDecision(StrEnum):
     APPROVE = "approve"
     REJECT = "reject"
+    FLAG = "flag"
+    """Not decided yet: the video stays in the queue with the reviewer's note."""
 
 
 class HumanReview(Evidence, Identified, Base):

@@ -1,7 +1,9 @@
 """Adapter translation tests: requests hit a stub transport, never the network."""
 
+import base64
 import json
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import anthropic
@@ -149,3 +151,31 @@ def test_api_errors_are_classified_as_retryable_or_not(status: int, retryable: b
 def test_an_unpriced_model_is_rejected_at_construction() -> None:
     with pytest.raises(ValueError, match="no price"):
         AnthropicLanguageModel(client=anthropic.Anthropic(api_key="k"), model="claude-unknown-9")
+
+
+def test_images_are_sent_as_base64_blocks_before_the_prompt(tmp_path: Path) -> None:
+    frame = tmp_path / "frame-01.jpg"
+    frame.write_bytes(b"\xff\xd8fake-jpeg")
+    stub = Stub(httpx2.Response(200, json=message()))
+    request = REQUEST.model_copy(update={"images": (frame, frame)})
+
+    model(stub).generate(request, Idea)
+
+    content = json.loads(stub.requests[0].content)["messages"][0]["content"]
+    assert [block["type"] for block in content] == ["image", "image", "text"]
+    assert content[0]["source"] == {
+        "type": "base64",
+        "media_type": "image/jpeg",
+        "data": base64.standard_b64encode(b"\xff\xd8fake-jpeg").decode(),
+    }
+    assert content[2]["text"] == "One title."
+
+
+def test_images_raise_the_cost_estimate(tmp_path: Path) -> None:
+    frame = tmp_path / "frame.jpg"
+    frame.write_bytes(b"x")
+    llm = model(Stub(httpx2.Response(200, json=message())))
+
+    with_images = llm.estimate_cost(REQUEST.model_copy(update={"images": (frame,) * 8}))
+
+    assert with_images > llm.estimate_cost(REQUEST) + Decimal("0.04")

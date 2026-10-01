@@ -259,7 +259,7 @@ def _produce(
         _fail(str(exc))
     if result.video_status is VideoStatus.GENERATED:
         report = run_quality_gates(
-            session, experiment_id, gates=build_qa_gates(settings), store=deps.store
+            session, experiment_id, gates=build_qa_gates(settings)(session), store=deps.store
         )
         for verdict in report.verdicts:
             typer.echo(f"qa {verdict.gate}: {verdict.outcome.value}")

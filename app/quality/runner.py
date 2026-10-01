@@ -45,6 +45,8 @@ class QAReport:
 def run_quality_gates(
     session: Session, experiment_id: uuid.UUID, *, gates: Sequence[QAGate], store: AssetStore
 ) -> QAReport:
+    """Evaluate ``gates`` in order (cheap deterministic checks first) and stop
+    at the first mandatory failure."""
     if not gates:
         raise ValueError("no QA gates configured: refusing to pass a video unchecked")
 
@@ -72,6 +74,7 @@ def run_quality_gates(
         creative_spec=experiment.genome.creative_spec,
         hypothesis=experiment.hypothesis.statement,
         requirements=experiment.output_requirements,
+        ip_spec=experiment.ip.spec,
     )
 
     verdicts: list[QAVerdict] = []
@@ -92,10 +95,11 @@ def run_quality_gates(
                 details=dict(verdict.details),
             )
         )
-        if gate.mandatory and verdict.outcome is QAOutcome.FAIL:
-            rejected = True
         if verdict.outcome is QAOutcome.ESCALATE:
             escalated = True
+        if gate.mandatory and verdict.outcome is QAOutcome.FAIL:
+            rejected = True
+            break  # the video is rejected: do not pay for further checks
 
     experiment.video_status = VideoStatus.QA_REJECTED if rejected else VideoStatus.APPROVAL_PENDING
     session.commit()

@@ -14,7 +14,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.bootstrap import build_asset_store
@@ -22,11 +22,15 @@ from app.config import get_settings
 from app.db import make_engine, registry
 from app.experiments.lineage import ExperimentNotFound, Lineage, get_lineage
 from app.production.models import Asset
-from app.quality.models import HumanReview, ReviewDecision
+from app.quality.models import HumanReview, QAResult, ReviewDecision
+from app.quality.ports import QAOutcome
 from app.quality.review import REVIEWABLE, ReviewNotAllowed, pending_reviews, submit_review
 from app.storage import AssetStore
 
 assert registry  # every ORM model must be registered before any session is used
+
+# Stage A of progressive autonomy: a human approves each of the first ~100 videos.
+STAGE_A_VIDEOS = 100
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
@@ -63,10 +67,18 @@ def _review_page(
     request: Request, lineage: Lineage, *, error: str | None = None, status_code: int = 200
 ) -> HTMLResponse:
     reviewable = lineage.experiment.video_status in {status.value for status in REVIEWABLE}
+    final_id = lineage.final_asset.id if lineage.final_asset else None
+    current_qa = [r for r in lineage.qa_results if r.asset_id == final_id]
     return templates.TemplateResponse(
         request,
         "review_detail.html",
-        {"lineage": lineage, "reviewable": reviewable, "error": error},
+        {
+            "lineage": lineage,
+            "reviewable": reviewable,
+            "error": error,
+            "qa_results": current_qa,
+            "escalations": [r for r in current_qa if r.outcome == "escalate"],
+        },
         status_code=status_code,
     )
 
@@ -93,8 +105,39 @@ def create_app() -> FastAPI:
             .order_by(HumanReview.created_at.desc())
             .limit(25)
         ).all()
+        pending = pending_reviews(session)
+        flagged = set(
+            session.scalars(
+                select(HumanReview.experiment_id).where(
+                    HumanReview.decision == ReviewDecision.FLAG,
+                    HumanReview.experiment_id.in_([e.id for e in pending]),
+                )
+            )
+        )
+        escalated = set(
+            session.scalars(
+                select(QAResult.experiment_id).where(
+                    QAResult.outcome == QAOutcome.ESCALATE,
+                    QAResult.experiment_id.in_([e.id for e in pending]),
+                )
+            )
+        )
+        decided = session.scalar(
+            select(func.count(func.distinct(HumanReview.experiment_id))).where(
+                HumanReview.decision != ReviewDecision.FLAG
+            )
+        )
         return templates.TemplateResponse(
-            request, "review_queue.html", {"pending": pending_reviews(session), "recent": recent}
+            request,
+            "review_queue.html",
+            {
+                "pending": pending,
+                "recent": recent,
+                "flagged": flagged,
+                "escalated": escalated,
+                "decided": decided or 0,
+                "stage_a_target": STAGE_A_VIDEOS,
+            },
         )
 
     @app.get("/review/{experiment_id}", response_class=HTMLResponse)
@@ -117,17 +160,20 @@ def create_app() -> FastAPI:
             submit_review(
                 session, experiment_id, decision=decision, reason=reason, reviewer=reviewer
             )
-        except ValueError:
+        except ValueError as exc:
+            message = str(exc)
             return _review_page(
-                request,
-                lineage,
-                error="A reason is required to reject a video.",
-                status_code=422,
+                request, lineage, error=message[0].upper() + message[1:] + ".", status_code=422
             )
         except ReviewNotAllowed as exc:
             return _review_page(request, lineage, error=str(exc), status_code=409)
         session.commit()
-        return RedirectResponse("/review", status_code=303)
+        if decision is ReviewDecision.FLAG:
+            return RedirectResponse("/review", status_code=303)
+        # Straight on to the next video waiting, so a queue is worked in one pass.
+        waiting = [e for e in pending_reviews(session) if e.id != experiment_id]
+        target = f"/review/{waiting[0].id}" if waiting else "/review"
+        return RedirectResponse(target, status_code=303)
 
     @app.get("/assets/{asset_id}/content")
     def asset_content(asset_id: uuid.UUID, session: SessionDep, store: StoreDep) -> FileResponse:

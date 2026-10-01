@@ -2,6 +2,8 @@
 {% block title %}Human review · Hatch{% endblock %}
 {% block content %}
 <h1>Human review</h1>
+<p class="muted">Stage A: every video is approved by a person before it can be published.
+  {{ decided }} of the first {{ stage_a_target }} decided.</p>
 
 <h2>Awaiting a decision ({{ pending | length }})</h2>
 {% if pending %}
@@ -10,7 +12,9 @@
   {% for experiment in pending %}
   <tr>
     <td>{{ experiment.ip.name }}</td>
-    <td>{{ experiment.hypothesis.statement }}</td>
+    <td>{{ experiment.hypothesis.statement }}
+      {% if experiment.id in escalated %}<span class="tag fail">QA escalated</span>{% endif %}
+      {% if experiment.id in flagged %}<span class="tag">flagged</span>{% endif %}</td>
     <td class="muted">{{ experiment.created_at.strftime("%Y-%m-%d %H:%M") }} UTC</td>
     <td><a href="/review/{{ experiment.id }}">Review</a></td>
   </tr>

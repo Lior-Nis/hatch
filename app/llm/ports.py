@@ -7,6 +7,7 @@ transports them. No vendor types cross this boundary.
 """
 
 from decimal import Decimal
+from pathlib import Path
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -30,6 +31,8 @@ class LLMRequest(BaseModel):
     Recorded on the call and in the ledger operation."""
     system: str
     prompt: str
+    images: tuple[Path, ...] = ()
+    """JPEG or PNG files shown to the model before the prompt, in order."""
     max_output_tokens: int = Field(default=8000, gt=0)
 
 

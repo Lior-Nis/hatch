@@ -29,6 +29,8 @@ class QACandidate(BaseModel):
     hypothesis: str | None = None
     requirements: dict[str, JsonValue] = Field(default_factory=dict)
     """The experiment's output requirements (see ``OutputRequirements``)."""
+    ip_spec: dict[str, JsonValue] = Field(default_factory=dict)
+    """The IP profile: characters, world rules and safety constraints."""
 
 
 class QAVerdict(BaseModel):

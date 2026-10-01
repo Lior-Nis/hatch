@@ -153,3 +153,16 @@ def test_rerunning_qa_after_a_decision_does_not_duplicate_results(
 
     assert again.video_status is VideoStatus.APPROVAL_PENDING
     assert len(session.scalars(select(QAResult)).all()) == 1
+
+
+def test_gates_after_a_mandatory_failure_are_not_run(
+    session: Session, experiment: Experiment, store: LocalAssetStore
+) -> None:
+    broken = FakeQAGate(name="technical", mandatory=True, outcome=QAOutcome.FAIL)
+    paid_review = ExplodingGate()  # would raise if it were evaluated
+
+    report = run_quality_gates(session, experiment.id, gates=[broken, paid_review], store=store)
+
+    assert report.rejected is True
+    assert [v.gate for v in report.verdicts] == ["technical"]
+    assert len(session.scalars(select(QAResult)).all()) == 1

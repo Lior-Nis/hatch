@@ -19,11 +19,13 @@ from app.creative.jobs import creative_handlers
 from app.db import make_engine, registry
 from app.evolution.anti_cloning import AntiCloningPolicy
 from app.experiments.spec import OutputRequirements
+from app.llm.calls import bound_caller
 from app.llm.ports import LanguageModel
 from app.production.jobs import PRODUCE_SHORT, produce_short_handler
 from app.production.ports import MediaGenerator
 from app.production.run import ProductionDeps, RetryPolicy
-from app.quality.jobs import RUN_QA, run_qa_handler
+from app.quality.content import ContentReviewer, ContentThresholds, content_gates
+from app.quality.jobs import RUN_QA, GateFactory, run_qa_handler
 from app.quality.ports import QAGate
 from app.quality.technical import TechnicalQAGate
 from app.scheduling.worker import JobHandler
@@ -112,9 +114,31 @@ def build_language_model(settings: Settings) -> LanguageModel:
     )
 
 
-def build_qa_gates(settings: Settings) -> list[QAGate]:
-    """Gates every generated video must go through, in order."""
-    return [TechnicalQAGate()]
+def build_qa_gates(settings: Settings) -> GateFactory:
+    """Gates every generated video must go through, in order: the free
+    technical check first, then the model-based content review (child safety,
+    visual, IP/brand, creative).
+
+    Fail-closed: without a configured language model the content gates still
+    exist but cannot assess anything, so they escalate every video to a human
+    rather than letting it through unchecked."""
+    governor = BudgetGovernor(BudgetLimits.from_settings(settings))
+    thresholds = ContentThresholds()
+    try:
+        llm: LanguageModel | None = build_language_model(settings)
+    except ConfigurationError:
+        llm = None
+
+    def gates(session: Session) -> list[QAGate]:
+        if llm is None:
+            reviewer = ContentReviewer(
+                None, unavailable="content review unavailable: no language model is configured"
+            )
+        else:
+            reviewer = ContentReviewer(bound_caller(session, llm, governor))
+        return [TechnicalQAGate(), *content_gates(reviewer, thresholds)]
+
+    return gates
 
 
 def build_production_deps(settings: Settings) -> ProductionDeps:

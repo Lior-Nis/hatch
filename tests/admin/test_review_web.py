@@ -10,8 +10,15 @@ from app.admin.web import create_app, get_asset_store, get_reviewer, get_session
 from app.experiments.models import Experiment
 from app.experiments.states import VideoStatus
 from app.quality.models import HumanReview, ReviewDecision
+from app.quality.ports import QAOutcome
+from app.quality.runner import run_quality_gates
+from integrations.fake.quality import FakeQAGate
 from integrations.object_storage.local import LocalAssetStore
-from tests.factories import final_asset, make_reviewable_experiment
+from tests.factories import (
+    final_asset,
+    make_generated_experiment,
+    make_reviewable_experiment,
+)
 
 
 @pytest.fixture
@@ -114,3 +121,61 @@ def test_unknown_experiment_returns_404(client: TestClient) -> None:
     response = client.get("/review/00000000-0000-0000-0000-000000000000")
 
     assert response.status_code == 404
+
+
+def test_stage_a_queue_is_worked_through_one_video_after_another(
+    client: TestClient, session: Session, tmp_path: Path, store: LocalAssetStore
+) -> None:
+    first, second, third = (
+        make_reviewable_experiment(session, tmp_path, store=store) for _ in range(3)
+    )
+
+    after_first = client.post(f"/review/{first.id}", data={"decision": "approve", "reason": ""})
+    after_second = client.post(
+        f"/review/{second.id}", data={"decision": "reject", "reason": "Flat ending."}
+    )
+    after_third = client.post(f"/review/{third.id}", data={"decision": "approve", "reason": ""})
+
+    assert after_first.headers["location"] == f"/review/{second.id}"
+    assert after_second.headers["location"] == f"/review/{third.id}"
+    assert after_third.headers["location"] == "/review"
+    statuses = [session.get_one(Experiment, e.id).video_status for e in (first, second, third)]
+    assert statuses == [VideoStatus.READY, VideoStatus.HUMAN_REJECTED, VideoStatus.READY]
+    queue = client.get("/review")
+    assert "Awaiting a decision (0)" in queue.text
+    assert "3 of the first 100" in queue.text
+
+
+def test_flagging_from_the_page_keeps_the_video_in_the_queue_with_a_marker(
+    client: TestClient, experiment: Experiment
+) -> None:
+    response = client.post(
+        f"/review/{experiment.id}", data={"decision": "flag", "reason": "Second look at audio."}
+    )
+
+    assert response.status_code == 303
+    queue = client.get("/review")
+    assert "Awaiting a decision (1)" in queue.text
+    assert "flagged" in queue.text
+    detail = client.get(f"/review/{experiment.id}")
+    assert "Second look at audio." in detail.text
+    assert 'value="flag"' in detail.text
+
+
+def test_review_page_highlights_qa_escalations_and_needs_a_reason_to_approve(
+    client: TestClient, session: Session, tmp_path: Path, store: LocalAssetStore
+) -> None:
+    experiment = make_generated_experiment(session, tmp_path, store=store)
+    gate = FakeQAGate(
+        name="child_safety", mandatory=True, outcome=QAOutcome.ESCALATE,
+        reasons=["inappropriate_fear (possible): distorted face at 0:03"],
+    )  # fmt: skip
+    run_quality_gates(session, experiment.id, gates=[gate], store=store)
+
+    page = client.get(f"/review/{experiment.id}")
+    refused = client.post(f"/review/{experiment.id}", data={"decision": "approve", "reason": ""})
+
+    assert "Needs your judgement" in page.text
+    assert "distorted face at 0:03" in page.text
+    assert refused.status_code == 422
+    assert "escalat" in refused.text

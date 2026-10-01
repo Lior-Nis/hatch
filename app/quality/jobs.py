@@ -1,7 +1,7 @@
 """Queue jobs for automated QA."""
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime
 
 from sqlalchemy import func, select
@@ -39,13 +39,19 @@ def enqueue_qa(
     )
 
 
+GateFactory = Callable[[Session], Sequence[QAGate]]
+"""Builds the gates for one QA run; model-based gates need the run's session
+to record and budget their calls."""
+
+
 def run_qa_handler(
-    *, gates: Sequence[QAGate], store: AssetStore, max_regenerations: int = 1
+    *, gates: Sequence[QAGate] | GateFactory, store: AssetStore, max_regenerations: int = 1
 ) -> JobHandler:
     def handle(session: Session, job: JobRun) -> JobResult:
         if job.experiment_id is None:
             raise PermanentJobError("run_qa job has no experiment")
-        report = run_quality_gates(session, job.experiment_id, gates=gates, store=store)
+        run_gates = gates(session) if callable(gates) else gates
+        report = run_quality_gates(session, job.experiment_id, gates=run_gates, store=store)
         regenerating = False
         if report.rejected:
             # Generate → QA → if fail: retry. The rejected asset stays rejected;
