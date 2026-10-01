@@ -1,5 +1,6 @@
 """Small builders for persisted test data."""
 
+import uuid
 from decimal import Decimal
 from pathlib import Path
 
@@ -24,8 +25,8 @@ LIMITS = BudgetLimits(
 )
 
 
-def make_experiment(session: Session) -> Experiment:
-    return create_experiment(session, FIRST_SHORT)
+def make_experiment(session: Session, *, lineage_id: uuid.UUID | None = None) -> Experiment:
+    return create_experiment(session, FIRST_SHORT, lineage_id=lineage_id)
 
 
 def make_generated_experiment(

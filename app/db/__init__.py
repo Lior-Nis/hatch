@@ -5,10 +5,10 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, ClassVar
 
 from alembic.config import Config
-from sqlalchemy import DateTime, Engine, Enum, Numeric, create_engine
+from sqlalchemy import DateTime, Engine, Enum, Numeric, create_engine, event, inspect
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
@@ -49,6 +49,45 @@ class Identified:
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+class ImmutableEvidenceError(Exception):
+    """An attempt was made to rewrite or delete experiment evidence."""
+
+
+class Evidence:
+    """Mixin for append-only experiment evidence.
+
+    Rows may be inserted; they can never be deleted, and only the columns named
+    in ``__mutable_columns__`` (operational progress such as a status) may be
+    updated. Interpretation of evidence can change — the evidence cannot.
+    """
+
+    __mutable_columns__: ClassVar[frozenset[str]] = frozenset()
+
+
+@event.listens_for(Session, "before_flush")
+def _protect_evidence(session: Session, _flush_context: object, _instances: object) -> None:
+    for instance in session.deleted:
+        if isinstance(instance, Evidence):
+            raise ImmutableEvidenceError(
+                f"{type(instance).__name__} rows are evidence and cannot be deleted"
+            )
+    for instance in session.dirty:
+        if not isinstance(instance, Evidence):
+            continue
+        state: Any = inspect(instance)
+        changed = {
+            attribute.key
+            for attribute in state.mapper.column_attrs
+            if state.attrs[attribute.key].history.has_changes()
+        }
+        frozen = changed - instance.__mutable_columns__
+        if frozen:
+            raise ImmutableEvidenceError(
+                f"{type(instance).__name__}.{', '.join(sorted(frozen))} is evidence "
+                "and cannot be rewritten"
+            )
 
 
 def make_engine(database_url: str) -> Engine:

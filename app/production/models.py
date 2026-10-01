@@ -7,7 +7,7 @@ from enum import StrEnum
 from sqlalchemy import BigInteger, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db import Base, Identified, JSONDict, Money, enum_column
+from app.db import Base, Evidence, Identified, JSONDict, Money, enum_column
 from app.experiments.models import Experiment
 
 
@@ -23,11 +23,23 @@ class AssetKind(StrEnum):
     FINAL_VIDEO = "final_video"
 
 
-class GenerationAttempt(Identified, Base):
+class GenerationAttempt(Evidence, Identified, Base):
     """One paid (or blocked) call to a media provider. Failed attempts are kept
-    so provider reliability, prompt failures, and wasted spend stay analysable."""
+    so provider reliability, prompt failures, and wasted spend stay analysable.
+    What was asked (prompt, request, model) never changes; only progress does."""
 
     __tablename__ = "generation_attempts"
+    __mutable_columns__ = frozenset(
+        {
+            "status",
+            "provider_job_id",
+            "provider_response",
+            "error",
+            "actual_cost_usd",
+            "started_at",
+            "finished_at",
+        }
+    )
     __table_args__ = (UniqueConstraint("experiment_id", "attempt_number"),)
 
     experiment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("experiments.id"), index=True)
@@ -53,7 +65,7 @@ class GenerationAttempt(Identified, Base):
     experiment: Mapped[Experiment] = relationship(back_populates="generation_attempts")
 
 
-class Asset(Identified, Base):
+class Asset(Evidence, Identified, Base):
     """Metadata for a stored binary. The bytes live in object storage."""
 
     __tablename__ = "assets"
@@ -72,3 +84,19 @@ class Asset(Identified, Base):
 
     experiment: Mapped[Experiment] = relationship(back_populates="assets")
     generation_attempt: Mapped[GenerationAttempt | None] = relationship()
+
+
+class ProviderModel(Identified, Base):
+    """Catalogue of generation models Hatch may route to, with the capability
+    and price facts routing needs. Reference data, not evidence."""
+
+    __tablename__ = "provider_models"
+    __table_args__ = (UniqueConstraint("provider", "model", "operation"),)
+
+    provider: Mapped[str] = mapped_column(String(60))
+    model: Mapped[str] = mapped_column(String(120))
+    operation: Mapped[str] = mapped_column(String(60))
+    capabilities: Mapped[JSONDict]
+    """Durations, resolutions, aspect ratios, native audio, ..."""
+    pricing: Mapped[JSONDict]
+    enabled: Mapped[bool] = mapped_column(default=True)

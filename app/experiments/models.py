@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
-from app.db import Base, Identified, JSONDict, enum_column
+from app.db import Base, Evidence, Identified, JSONDict, enum_column
 from app.experiments.states import (
     EXPERIMENT_LIFECYCLE,
     VIDEO_LIFECYCLE,
@@ -23,12 +23,16 @@ from app.ips.models import IP
 
 if TYPE_CHECKING:
     from app.budgets.models import BudgetLedgerEntry
+    from app.characters.models import ExperimentCharacter
+    from app.evolution.models import ExperimentParent, Mutation
+    from app.fitness.models import FitnessSnapshot
     from app.production.models import Asset, GenerationAttempt
     from app.publishing.models import Publication
     from app.quality.models import HumanReview, QAResult
+    from app.scheduling.models import JobRun
 
 
-class Hypothesis(Identified, Base):
+class Hypothesis(Evidence, Identified, Base):
     """An explicit, falsifiable creative claim an experiment tests."""
 
     __tablename__ = "hypotheses"
@@ -44,7 +48,7 @@ class Hypothesis(Identified, Base):
     ip: Mapped[IP] = relationship()
 
 
-class CreativeGenome(Identified, Base):
+class CreativeGenome(Evidence, Identified, Base):
     """Structured genes plus the free-form creative specification."""
 
     __tablename__ = "creative_genomes"
@@ -54,10 +58,11 @@ class CreativeGenome(Identified, Base):
     creative_spec: Mapped[str] = mapped_column(Text)
 
 
-class Experiment(Identified, Base):
+class Experiment(Evidence, Identified, Base):
     """One candidate video testing one hypothesis with one genome."""
 
     __tablename__ = "experiments"
+    __mutable_columns__ = frozenset({"status", "video_status", "conclusion"})
 
     ip_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ips.id"), index=True)
     hypothesis_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("hypotheses.id"))
@@ -98,6 +103,24 @@ class Experiment(Identified, Base):
     )
     ledger_entries: Mapped[list["BudgetLedgerEntry"]] = relationship(
         back_populates="experiment", order_by="BudgetLedgerEntry.created_at"
+    )
+    parents: Mapped[list["ExperimentParent"]] = relationship(
+        back_populates="experiment", foreign_keys="ExperimentParent.experiment_id"
+    )
+    children: Mapped[list["ExperimentParent"]] = relationship(
+        back_populates="parent", foreign_keys="ExperimentParent.parent_id"
+    )
+    mutations: Mapped[list["Mutation"]] = relationship(
+        back_populates="experiment",
+        foreign_keys="Mutation.experiment_id",
+        order_by="Mutation.created_at",
+    )
+    characters: Mapped[list["ExperimentCharacter"]] = relationship(back_populates="experiment")
+    fitness_snapshots: Mapped[list["FitnessSnapshot"]] = relationship(
+        back_populates="experiment", order_by="FitnessSnapshot.created_at"
+    )
+    job_runs: Mapped[list["JobRun"]] = relationship(
+        back_populates="experiment", order_by="JobRun.created_at"
     )
 
     @validates("status")

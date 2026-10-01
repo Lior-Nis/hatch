@@ -1,5 +1,7 @@
 """Creating experiments from specifications."""
 
+import uuid
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -18,8 +20,11 @@ def get_or_create_ip(session: Session, spec: IPSpec) -> IP:
     return ip
 
 
-def create_experiment(session: Session, spec: ExperimentSpec) -> Experiment:
-    """Persist a parentless candidate (hypothesis + genome + experiment)."""
+def create_experiment(
+    session: Session, spec: ExperimentSpec, *, lineage_id: uuid.UUID | None = None
+) -> Experiment:
+    """Persist a candidate (hypothesis + genome + experiment). A descendant
+    passes its ancestor's ``lineage_id``; a novel candidate starts a new one."""
     ip = get_or_create_ip(session, spec.ip)
     hypothesis = Hypothesis(
         ip=ip,
@@ -39,6 +44,7 @@ def create_experiment(session: Session, spec: ExperimentSpec) -> Experiment:
         genome=genome,
         generation_reason=spec.generation_reason,
         output_requirements=spec.output.model_dump(mode="json"),
+        lineage_id=lineage_id or uuid.uuid4(),
     )
     session.add(experiment)
     # Hypothesis and genome exist, so the candidate is fully specified.

@@ -4,13 +4,13 @@ from enum import StrEnum
 from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db import Base, Identified, JSONDict, enum_column
+from app.db import Base, Evidence, Identified, JSONDict, enum_column
 from app.experiments.models import Experiment
 from app.production.models import Asset
 from app.quality.ports import QAOutcome
 
 
-class QAResult(Identified, Base):
+class QAResult(Evidence, Identified, Base):
     """One gate's verdict on one asset. Append-only."""
 
     __tablename__ = "qa_results"
@@ -34,7 +34,7 @@ class ReviewDecision(StrEnum):
     REJECT = "reject"
 
 
-class HumanReview(Identified, Base):
+class HumanReview(Evidence, Identified, Base):
     """A human reviewer's decision on one asset. Append-only: a decision is
     never edited, so reviews double as labelled QA data."""
 

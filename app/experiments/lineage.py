@@ -119,7 +119,7 @@ class PublicationView(_View):
     asset_id: uuid.UUID
     platform: str
     status: str
-    platform_account_id: str | None
+    platform_account_id: uuid.UUID | None
     platform_post_id: str | None
     scheduled_at: datetime | None
     published_at: datetime | None
@@ -174,6 +174,7 @@ def get_lineage(session: Session, experiment_id: uuid.UUID) -> Lineage:
             selectinload(Experiment.human_reviews),
             selectinload(Experiment.publications),
             selectinload(Experiment.ledger_entries),
+            selectinload(Experiment.parents),
         )
     ).one_or_none()
     if experiment is None:
@@ -193,7 +194,7 @@ def get_lineage(session: Session, experiment_id: uuid.UUID) -> Lineage:
         experiment=ExperimentView(
             id=experiment.id,
             lineage_id=experiment.lineage_id,
-            parent_experiment_ids=[],  # parentage arrives with ExperimentParent
+            parent_experiment_ids=[link.parent_id for link in experiment.parents],
             generation_reason=experiment.generation_reason,
             status=experiment.status.value,
             video_status=experiment.video_status.value,

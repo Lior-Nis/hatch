@@ -5,7 +5,7 @@ from enum import StrEnum
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db import Base, Identified, JSONDict, Money, enum_column
+from app.db import Base, Evidence, Identified, JSONDict, Money, enum_column
 from app.experiments.models import Experiment
 from app.production.models import GenerationAttempt
 
@@ -19,11 +19,12 @@ class LedgerStatus(StrEnum):
     """Denied by the budget governor. Never counts as spend."""
 
 
-class BudgetLedgerEntry(Identified, Base):
+class BudgetLedgerEntry(Evidence, Identified, Base):
     """One paid external operation — or one blocked attempt at it. Written with
     the estimate before the call; settled once afterwards and never rewritten."""
 
     __tablename__ = "budget_ledger"
+    __mutable_columns__ = frozenset({"status", "actual_cost_usd", "settled_at"})
 
     provider: Mapped[str] = mapped_column(String(60))
     model: Mapped[str] = mapped_column(String(120))
