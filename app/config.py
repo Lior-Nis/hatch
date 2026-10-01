@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # Budget contract (USD). Defaults are the PRD's initial production limits.
     budget_target_per_video_usd: Decimal = Decimal("0.50")
     budget_max_per_video_usd: Decimal = Decimal("1.50")
+    # The PRD requires a per-generation ceiling but names no figure. Half the
+    # per-video maximum leaves room for one retry inside the video budget.
+    budget_max_per_generation_usd: Decimal = Decimal("0.75")
     budget_daily_usd: Decimal = Decimal("15.00")
     budget_monthly_usd: Decimal = Decimal("500.00")
 
