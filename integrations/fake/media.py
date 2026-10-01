@@ -49,9 +49,12 @@ class FakeMediaGenerator:
         *,
         cost_per_second_usd: Decimal = Decimal("0.01"),
         fail_next: list[str] | None = None,
+        polls_until_done: int = 0,
     ) -> None:
         self._cost_per_second = cost_per_second_usd
         self._fail_next = list(fail_next or [])
+        self._polls_until_done = polls_until_done
+        self._polls: dict[str, int] = {}
         self._jobs: dict[str, GenerationJob] = {}
         self._job_by_key: dict[str, str] = {}
         self._request_by_job: dict[str, MediaRequest] = {}
@@ -91,10 +94,16 @@ class FakeMediaGenerator:
         return finished.model_copy(update={"state": JobState.PENDING, "outputs": ()})
 
     def get_job(self, provider_job_id: str) -> GenerationJob:
-        try:
-            return self._jobs[provider_job_id]
-        except KeyError:
-            raise ProviderError(f"unknown job: {provider_job_id}") from None
+        job = self._jobs.get(provider_job_id)
+        if job is None:
+            raise ProviderError(f"unknown job: {provider_job_id}")
+        polls = self._polls.get(provider_job_id, 0)
+        self._polls[provider_job_id] = polls + 1
+        if polls < self._polls_until_done:
+            return job.model_copy(
+                update={"state": JobState.RUNNING, "outputs": (), "actual_cost_usd": None}
+            )
+        return job
 
     def download(self, output: MediaOutput, destination: Path) -> None:
         job_id = output.url.removeprefix("fake://").split("/", 1)[0]
