@@ -89,3 +89,31 @@ def escalations(session: Session, asset_id: uuid.UUID) -> list[QAResult]:
             .order_by(QAResult.created_at)
         )
     )
+
+
+def audit_rejection(
+    session: Session, experiment_id: uuid.UUID, *, agrees: bool, reason: str, reviewer: str
+) -> HumanReview:
+    """Record whether a human agrees with an automated QA rejection. The video
+    stays rejected either way: a mandatory failure is never overridden. The
+    audit only tells us how trustworthy the gates are."""
+    reason = reason.strip()
+    if not reason:
+        raise ValueError("a reason is required to audit a rejection")
+    experiment = session.get_one(Experiment, experiment_id)
+    asset = final_video(session, experiment_id)
+    if experiment.video_status is not VideoStatus.QA_REJECTED or asset is None:
+        raise ReviewNotAllowed(
+            f"experiment {experiment_id} was not rejected by automated QA "
+            f"(video is {experiment.video_status.value})"
+        )
+    review = HumanReview(
+        experiment=experiment,
+        asset=asset,
+        decision=ReviewDecision.AUDIT_AGREE if agrees else ReviewDecision.AUDIT_DISAGREE,
+        reason=reason,
+        reviewer=reviewer,
+    )
+    session.add(review)
+    session.flush()
+    return review

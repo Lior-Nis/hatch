@@ -9,7 +9,7 @@ import uuid
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
@@ -21,10 +21,18 @@ from app.bootstrap import build_asset_store
 from app.config import get_settings
 from app.db import make_engine, registry
 from app.experiments.lineage import ExperimentNotFound, Lineage, get_lineage
+from app.experiments.models import Experiment
+from app.experiments.states import VideoStatus
 from app.production.models import Asset
 from app.quality.models import HumanReview, QAResult, ReviewDecision
 from app.quality.ports import QAOutcome
-from app.quality.review import REVIEWABLE, ReviewNotAllowed, pending_reviews, submit_review
+from app.quality.review import (
+    REVIEWABLE,
+    ReviewNotAllowed,
+    audit_rejection,
+    pending_reviews,
+    submit_review,
+)
 from app.storage import AssetStore
 
 assert registry  # every ORM model must be registered before any session is used
@@ -78,6 +86,8 @@ def _review_page(
             "error": error,
             "qa_results": current_qa,
             "escalations": [r for r in current_qa if r.outcome == "escalate"],
+            "auditable": lineage.experiment.video_status == VideoStatus.QA_REJECTED.value
+            and not any(r.decision.startswith("audit_") for r in lineage.human_reviews),
         },
         status_code=status_code,
     )
@@ -124,13 +134,26 @@ def create_app() -> FastAPI:
         )
         decided = session.scalar(
             select(func.count(func.distinct(HumanReview.experiment_id))).where(
-                HumanReview.decision != ReviewDecision.FLAG
+                HumanReview.decision.in_((ReviewDecision.APPROVE, ReviewDecision.REJECT))
             )
         )
+        audited = select(HumanReview.experiment_id).where(
+            HumanReview.decision.in_((ReviewDecision.AUDIT_AGREE, ReviewDecision.AUDIT_DISAGREE))
+        )
+        rejected = session.scalars(
+            select(Experiment)
+            .where(
+                Experiment.video_status == VideoStatus.QA_REJECTED,
+                Experiment.id.not_in(audited),
+            )
+            .order_by(Experiment.created_at.desc())
+            .limit(20)
+        ).all()
         return templates.TemplateResponse(
             request,
             "review_queue.html",
             {
+                "rejected": rejected,
                 "pending": pending,
                 "recent": recent,
                 "flagged": flagged,
@@ -174,6 +197,33 @@ def create_app() -> FastAPI:
         waiting = [e for e in pending_reviews(session) if e.id != experiment_id]
         target = f"/review/{waiting[0].id}" if waiting else "/review"
         return RedirectResponse(target, status_code=303)
+
+    @app.post("/review/{experiment_id}/audit")
+    def review_audit(
+        request: Request,
+        experiment_id: uuid.UUID,
+        session: SessionDep,
+        reviewer: ReviewerDep,
+        verdict: Annotated[Literal["agree", "disagree"], Form()],
+        reason: Annotated[str, Form()] = "",
+    ) -> Response:
+        """Audit an automated rejection. The video stays rejected either way."""
+        lineage = _lineage_or_404(session, experiment_id)
+        try:
+            audit_rejection(
+                session, experiment_id, agrees=verdict == "agree", reason=reason, reviewer=reviewer
+            )
+        except ValueError:
+            return _review_page(
+                request,
+                lineage,
+                error="A reason is required to audit a rejection.",
+                status_code=422,
+            )
+        except ReviewNotAllowed as exc:
+            return _review_page(request, lineage, error=str(exc), status_code=409)
+        session.commit()
+        return RedirectResponse("/review", status_code=303)
 
     @app.get("/assets/{asset_id}/content")
     def asset_content(asset_id: uuid.UUID, session: SessionDep, store: StoreDep) -> FileResponse:

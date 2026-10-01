@@ -39,6 +39,18 @@
         <button type="submit" name="decision" value="flag">Flag for later</button>
       </div>
     </form>
+    {% elif auditable %}
+    <form method="post" action="/review/{{ lineage.experiment.id }}/audit">
+      <p><strong>Automated QA rejected this video.</strong> It stays rejected whatever you
+        answer; your audit only measures whether the gates were right.</p>
+      {% if error %}<p class="error">{{ error }}</p>{% endif %}
+      <label for="reason"><strong>Reason</strong> <span class="muted">(required)</span></label>
+      <textarea id="reason" name="reason"></textarea>
+      <div class="actions">
+        <button class="reject" type="submit" name="verdict" value="agree">Agree: reject</button>
+        <button type="submit" name="verdict" value="disagree">I would have approved</button>
+      </div>
+    </form>
     {% elif error %}
     <p class="error">{{ error }}</p>
     {% endif %}

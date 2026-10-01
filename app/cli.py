@@ -58,6 +58,7 @@ from app.publishing.models import PlatformAccount
 from app.publishing.ports import PublisherError
 from app.publishing.service import map_account
 from app.quality.runner import run_quality_gates
+from app.quality.shadow import shadow_autonomy_report
 from app.scheduling.models import JobRun, JobStatus
 from app.scheduling.recurring import ensure_recurring
 from app.scheduling.worker import Worker
@@ -209,6 +210,37 @@ def evolve(
                 f"{report.lifecycle_transitions} lifecycle change(s), {report.planned} planned "
                 f"({report.in_pipeline} already in the pipeline)"
             )
+
+
+@app.command()
+def autonomy() -> None:
+    """Shadow autonomy: how often automated QA agrees with human review."""
+    with open_session(get_settings()) as session:
+        report = shadow_autonomy_report(session)
+
+    def rate(value: float | None) -> str:
+        return f"{value:.1%}" if value is not None else "n/a"
+
+    typer.echo(f"human decisions compared: {report.compared}")
+    typer.echo(f"agreement: {report.agreements} ({rate(report.agreement_rate)})")
+    typer.echo(
+        f"false positives (system would publish, human rejected): {report.false_positives} "
+        f"({rate(report.false_positive_rate)} of system approvals)"
+    )
+    typer.echo(
+        f"false negatives (system held back, human approved): {report.false_negatives} "
+        f"({rate(report.false_negative_rate)} of human approvals)"
+    )
+    typer.echo(
+        f"automated rejections: {report.auto_rejected}, audited {report.audited_rejections}, "
+        f"wrong {report.wrong_rejections}"
+    )
+    for category, count in sorted(report.disagreement_categories.items()):
+        typer.echo(f"  {category}: {count}")
+    typer.echo(f"thresholds met: {'yes' if report.meets_thresholds else 'no'}")
+    for blocker in report.blockers:
+        typer.echo(f"  - {blocker}")
+    typer.echo(report.note)
 
 
 @app.command()

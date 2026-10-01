@@ -179,3 +179,45 @@ def test_review_page_highlights_qa_escalations_and_needs_a_reason_to_approve(
     assert "distorted face at 0:03" in page.text
     assert refused.status_code == 422
     assert "escalat" in refused.text
+
+
+def test_an_automated_rejection_can_be_audited_from_the_ui(
+    client: TestClient, session: Session, tmp_path: Path, store: LocalAssetStore
+) -> None:
+    experiment = make_generated_experiment(session, tmp_path, store=store)
+    gate = FakeQAGate(
+        name="child_safety", mandatory=True, outcome=QAOutcome.FAIL, reasons=["scary shadow"]
+    )
+    run_quality_gates(session, experiment.id, gates=[gate], store=store)
+
+    queue = client.get("/review")
+    detail = client.get(f"/review/{experiment.id}")
+    response = client.post(
+        f"/review/{experiment.id}/audit",
+        data={"verdict": "disagree", "reason": "It is only a soft shadow."},
+    )
+
+    assert "Rejected by automated QA" in queue.text
+    assert f"/review/{experiment.id}" in queue.text
+    assert "scary shadow" in detail.text
+    assert 'name="verdict"' in detail.text and 'name="decision"' not in detail.text
+    assert response.status_code == 303
+    audit = session.scalars(select(HumanReview)).one()
+    assert audit.decision is ReviewDecision.AUDIT_DISAGREE
+    assert session.get_one(Experiment, experiment.id).video_status is VideoStatus.QA_REJECTED
+    assert f"/review/{experiment.id}" not in client.get("/review").text.split("Recent decisions")[0]
+
+
+def test_an_audit_needs_a_reason(
+    client: TestClient, session: Session, tmp_path: Path, store: LocalAssetStore
+) -> None:
+    experiment = make_generated_experiment(session, tmp_path, store=store)
+    gate = FakeQAGate(name="visual", mandatory=True, outcome=QAOutcome.FAIL)
+    run_quality_gates(session, experiment.id, gates=[gate], store=store)
+
+    response = client.post(
+        f"/review/{experiment.id}/audit", data={"verdict": "agree", "reason": ""}
+    )
+
+    assert response.status_code == 422
+    assert session.scalars(select(HumanReview)).all() == []

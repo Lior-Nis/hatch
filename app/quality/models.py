@@ -34,6 +34,10 @@ class ReviewDecision(StrEnum):
     REJECT = "reject"
     FLAG = "flag"
     """Not decided yet: the video stays in the queue with the reviewer's note."""
+    AUDIT_AGREE = "audit_agree"
+    AUDIT_DISAGREE = "audit_disagree"
+    """A human audit of an automated rejection. It changes nothing about the
+    video; it measures how often the automated gates reject wrongly."""
 
 
 class HumanReview(Evidence, Identified, Base):

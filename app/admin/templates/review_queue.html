@@ -24,6 +24,23 @@
 <p class="muted">Nothing is waiting for review.</p>
 {% endif %}
 
+<h2>Rejected by automated QA <span class="muted">(audit a sample: were the gates right?)</span></h2>
+{% if rejected %}
+<table>
+  <tr><th>IP</th><th>Hypothesis</th><th>Created</th><th></th></tr>
+  {% for experiment in rejected %}
+  <tr>
+    <td>{{ experiment.ip.name }}</td>
+    <td>{{ experiment.hypothesis.statement }}</td>
+    <td class="muted">{{ experiment.created_at.strftime("%Y-%m-%d %H:%M") }} UTC</td>
+    <td><a href="/review/{{ experiment.id }}">Audit</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No unaudited automated rejections.</p>
+{% endif %}
+
 <h2>Recent decisions</h2>
 {% if recent %}
 <table>
