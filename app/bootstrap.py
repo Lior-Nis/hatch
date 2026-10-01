@@ -67,7 +67,7 @@ def open_session(settings: Settings) -> Iterator[Session]:
 
 def build_asset_store(settings: Settings) -> AssetStore:
     if settings.asset_store == "local":
-        return LocalAssetStore(settings.asset_dir)
+        return LocalAssetStore(settings.asset_dir, public_base_url=settings.asset_public_base_url)
     if (
         settings.s3_bucket is None
         or settings.s3_access_key_id is None
@@ -84,6 +84,7 @@ def build_asset_store(settings: Settings) -> AssetStore:
         secret_access_key=settings.s3_secret_access_key.get_secret_value(),
         region=settings.s3_region,
         cache_dir=settings.asset_dir / "s3-cache",
+        public_base_url=settings.asset_public_base_url,
     )
 
 

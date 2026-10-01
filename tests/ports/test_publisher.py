@@ -19,8 +19,7 @@ def _request(publication_id: str = "pub-1", **overrides: object) -> PublishReque
         "platform_account_id": "yt-channel-1",
         "media_url": "https://assets.example/short.mp4",
         "title": "Snail paints a rainbow",
-        "caption": "Colours everywhere!",
-        "hashtags": ("kids", "colours"),
+        "text": "Colours everywhere! #kids #colours",
     }
     fields.update(overrides)
     return PublishRequest.model_validate(fields)

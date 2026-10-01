@@ -2,9 +2,11 @@
 
 from datetime import UTC, datetime
 
+from app.platforms import Platform
 from app.publishing.ports import (
     PublicationState,
     PublicationStatus,
+    PublisherChannel,
     PublishReceipt,
     PublishRequest,
     PublishTargetError,
@@ -36,6 +38,27 @@ class FakePublisher:
             published_at=datetime.now(UTC),
         )
         return self._create(request, status)
+
+    def deliver(self, external_id: str) -> None:
+        """Test hook: the platform has published a scheduled post."""
+        request = self.requests[external_id]
+        post_id = f"{request.platform.value}-post-{request.publication_id}"
+        self._status[external_id] = PublicationStatus(
+            state=PublicationState.PUBLISHED,
+            platform_post_id=post_id,
+            permalink=f"https://fake.example/{request.platform.value}/{post_id}",
+            published_at=datetime.now(UTC),
+        )
+
+    def fail(self, external_id: str, error: str) -> None:
+        """Test hook: the platform rejected a scheduled post."""
+        self._status[external_id] = PublicationStatus(state=PublicationState.FAILED, error=error)
+
+    def list_channels(self) -> list[PublisherChannel]:
+        return [
+            PublisherChannel(id=account, platform=Platform.YOUTUBE_SHORTS, name=account)
+            for account in sorted(self._accounts)
+        ]
 
     def cancel(self, external_id: str) -> None:
         self._status[external_id] = PublicationStatus(state=PublicationState.CANCELLED)

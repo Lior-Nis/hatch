@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     # download cache.
     asset_store: Literal["local", "s3"] = "local"
     asset_dir: Path = Path("var/assets")
+    asset_public_base_url: str | None = None
+    """Public HTTPS base URL of the asset bucket; publishers fetch videos from it."""
     s3_bucket: str | None = None
     s3_endpoint_url: str | None = None
     s3_region: str = "auto"
@@ -55,6 +57,9 @@ class Settings(BaseSettings):
     generation_max_regenerations_after_qa: int = 1
     generation_poll_interval_seconds: float = 5.0
     generation_timeout_seconds: float = 900.0
+
+    # Publishing (Buffer GraphQL API).
+    buffer_api_key: SecretStr | None = None
 
     # Language model for creative agents and content QA (Claude API).
     anthropic_api_key: SecretStr | None = None

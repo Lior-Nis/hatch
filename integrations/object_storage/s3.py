@@ -14,7 +14,7 @@ from typing import Any
 import boto3
 from botocore.exceptions import ClientError
 
-from app.storage import AssetNotFound, StoredObject
+from app.storage import AssetNotFound, AssetNotPublic, StoredObject
 
 
 def _sha256(path: Path) -> str:
@@ -26,7 +26,10 @@ def _sha256(path: Path) -> str:
 
 
 class S3AssetStore:
-    def __init__(self, *, bucket: str, client: Any, cache_dir: Path) -> None:
+    def __init__(
+        self, *, bucket: str, client: Any, cache_dir: Path, public_base_url: str | None = None
+    ) -> None:
+        self._public_base_url = public_base_url.rstrip("/") if public_base_url else None
         self._bucket = bucket
         self._client = client
         self._cache_dir = cache_dir.resolve()
@@ -42,6 +45,7 @@ class S3AssetStore:
         cache_dir: Path,
         endpoint_url: str | None = None,
         region: str = "auto",
+        public_base_url: str | None = None,
     ) -> "S3AssetStore":
         client = boto3.client(
             "s3",
@@ -50,7 +54,9 @@ class S3AssetStore:
             aws_secret_access_key=secret_access_key,
             region_name=region,
         )
-        return cls(bucket=bucket, client=client, cache_dir=cache_dir)
+        return cls(
+            bucket=bucket, client=client, cache_dir=cache_dir, public_base_url=public_base_url
+        )
 
     def close(self) -> None:
         self._client.close()
@@ -67,6 +73,15 @@ class S3AssetStore:
         return StoredObject(
             uri=f"{self._prefix}{key}", sha256=sha256, size_bytes=source.stat().st_size
         )
+
+    def public_url(self, uri: str) -> str:
+        if self._public_base_url is None:
+            raise AssetNotPublic(
+                "no public URL is configured for the bucket; set HATCH_ASSET_PUBLIC_BASE_URL"
+            )
+        if not uri.startswith(self._prefix):
+            raise ValueError(f"not an asset in bucket {self._bucket}: {uri}")
+        return f"{self._public_base_url}/{uri.removeprefix(self._prefix)}"
 
     def local_path(self, uri: str) -> Path:
         if not uri.startswith(self._prefix):

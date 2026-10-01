@@ -34,11 +34,15 @@ class PublishRequest(BaseModel):
     """Hatch's own id; also the idempotency key for the external side effect."""
     platform: Platform
     platform_account_id: str
+    """The publisher's id for the destination channel."""
     media_url: str
-    title: str
-    caption: str
-    hashtags: tuple[str, ...] = ()
-    thumbnail_url: str | None = None
+    """Public, permanent HTTPS URL of the canonical video."""
+    title: str | None = None
+    text: str
+    """The full post body: caption, call to action and hashtags."""
+    thumbnail_offset_ms: int = 0
+    made_for_kids: bool | None = None
+    ai_generated: bool = True
     scheduled_at: datetime | None = None
 
 
@@ -60,6 +64,20 @@ class PublicationStatus(BaseModel):
     error: str | None = None
 
 
+class PublisherChannel(BaseModel):
+    """A destination account as the publisher knows it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    platform: Platform
+    name: str
+    external_account_id: str | None = None
+    """The platform's own id for the account, when the publisher exposes it."""
+    automatic: bool = True
+    """False when posts to this channel would only be phone reminders."""
+
+
 class Publisher(Protocol):
     @property
     def provider(self) -> str: ...
@@ -78,3 +96,7 @@ class Publisher(Protocol):
         ...
 
     def get_status(self, external_id: str) -> PublicationStatus: ...
+
+    def list_channels(self) -> list[PublisherChannel]:
+        """Connected destination accounts, for mapping them to IPs."""
+        ...

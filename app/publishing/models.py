@@ -3,10 +3,10 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint
+from sqlalchemy import ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db import Base, Identified, enum_column
+from app.db import Base, Identified, JSONDict, enum_column
 from app.experiments.models import Experiment
 from app.ips.models import IP
 from app.platforms import Platform
@@ -57,6 +57,7 @@ class Publication(Identified, Base):
     """Hatch's own record of one platform package of a canonical video."""
 
     __tablename__ = "publications"
+    __table_args__ = (UniqueConstraint("experiment_id", "platform"),)
 
     experiment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("experiments.id"), index=True)
     asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id"))
@@ -67,8 +68,14 @@ class Publication(Identified, Base):
     platform_account_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("platform_accounts.id")
     )
+    package: Mapped[JSONDict] = mapped_column(default=dict)
+    """The platform packaging (``PlatformPackage``): title, caption, hashtags,
+    call to action, thumbnail frame, policy flags."""
+    publisher: Mapped[str | None] = mapped_column(String(60))
     external_id: Mapped[str | None] = mapped_column(String(200))
     """The publisher's (e.g. Buffer's) id for the post."""
+    permalink: Mapped[str | None] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text)
     platform_post_id: Mapped[str | None] = mapped_column(String(200))
     scheduled_at: Mapped[datetime | None]
     published_at: Mapped[datetime | None]

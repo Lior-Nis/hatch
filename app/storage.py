@@ -11,6 +11,10 @@ class AssetNotFound(Exception):
     """No object exists at the given storage URI."""
 
 
+class AssetNotPublic(Exception):
+    """The store has no public URL for its objects."""
+
+
 class StoredObject(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -27,4 +31,9 @@ class AssetStore(Protocol):
     def local_path(self, uri: str) -> Path:
         """A local filesystem path holding the object's bytes (for probing,
         QA, and serving to a reviewer)."""
+        ...
+
+    def public_url(self, uri: str) -> str:
+        """A permanent, unauthenticated HTTPS URL for the object, as required
+        by publishers that fetch media themselves. Raises ``AssetNotPublic``."""
         ...
