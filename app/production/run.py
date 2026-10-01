@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.budgets.governor import BudgetExceeded, BudgetGovernor
 from app.budgets.models import BudgetLedgerEntry
-from app.creative.genome import Genes
+from app.creative.genome import parse_genes
 from app.db import utcnow
 from app.experiments.models import Experiment
 from app.experiments.states import ExperimentStatus, VideoStatus
@@ -96,7 +96,7 @@ def produce_short(
 def _start_attempt(
     session: Session, experiment: Experiment, deps: ProductionDeps
 ) -> GenerationAttempt:
-    genes = Genes.model_validate(experiment.genome.genes)
+    genes = parse_genes(experiment.genome.schema_version, experiment.genome.genes)
     prompt = build_video_prompt(
         ip_spec=experiment.ip.spec, genes=genes, creative_spec=experiment.genome.creative_spec
     )

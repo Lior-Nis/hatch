@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.db import Base, Evidence, Identified, JSONDict, enum_column, utcnow
@@ -53,6 +53,7 @@ class CreativeGenome(Evidence, Identified, Base):
     """Structured genes plus the free-form creative specification."""
 
     __tablename__ = "creative_genomes"
+    __table_args__ = (Index("ix_creative_genomes_genes", "genes", postgresql_using="gin"),)
 
     schema_version: Mapped[int]
     genes: Mapped[JSONDict]
