@@ -36,6 +36,7 @@ class ExperimentView(_View):
     video_status: str
     conclusion: str | None
     output_requirements: dict[str, Any]
+    production_plan: dict[str, Any]
     created_at: datetime
 
 
@@ -200,6 +201,7 @@ def get_lineage(session: Session, experiment_id: uuid.UUID) -> Lineage:
             video_status=experiment.video_status.value,
             conclusion=experiment.conclusion.value if experiment.conclusion else None,
             output_requirements=experiment.output_requirements,
+            production_plan=experiment.production_plan,
             created_at=experiment.created_at,
         ),
         ip=IPView.model_validate(experiment.ip),

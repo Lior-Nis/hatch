@@ -16,6 +16,8 @@ with the exact problem. Nothing is persisted unless a draft passes.
 
 import json
 import uuid
+from collections.abc import Callable
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
@@ -48,6 +50,14 @@ from app.experiments.spec import HypothesisSpec, OutputRequirements, check_genom
 from app.ips.models import IP
 from app.llm.calls import attribute_to_experiment, call_model
 from app.llm.ports import LanguageModel, LLMRequest
+from app.observability.health import provider_health
+from app.production.routing import (
+    NoEligibleModel,
+    RoutingDecision,
+    RoutingRequirements,
+    load_catalog,
+    route_video_model,
+)
 
 MAX_MUTATED_GENES = 3
 MAX_DRAFT_ATTEMPTS = 2
@@ -107,6 +117,60 @@ class ProductionDefaults(BaseModel):
     prompt_strategy: str
     image_model: str | None = None
     aspect_ratio: str = "9:16"
+
+
+class ProductionChoice(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    genes: ProductionDefaults
+    routing: RoutingDecision | None = None
+
+
+Planner = Callable[[Session, int, str, bool], ProductionChoice]
+"""(session, duration_seconds, aspect_ratio, with_audio) → production genes."""
+
+
+def routed_production(
+    *,
+    target_cost_usd: Decimal,
+    max_cost_usd: Decimal,
+    prompt_strategy: str,
+    override: str | None = None,
+) -> Planner:
+    """A planner that routes each candidate to a model from the catalogue,
+    taking recent provider reliability into account."""
+
+    def plan(
+        session: Session, duration_seconds: int, aspect_ratio: str, with_audio: bool
+    ) -> ProductionChoice:
+        failure_rates = {
+            health.model: health.failure_rate
+            for health in provider_health(session)
+            if health.failure_rate is not None
+        }
+        decision = route_video_model(
+            RoutingRequirements(
+                duration_seconds=duration_seconds,
+                aspect_ratio=aspect_ratio,
+                with_audio=with_audio,
+                target_cost_usd=target_cost_usd,
+                max_cost_usd=max_cost_usd,
+            ),
+            load_catalog(session),
+            failure_rates=failure_rates,
+            override=override,
+        )
+        return ProductionChoice(
+            genes=ProductionDefaults(
+                video_model=decision.model,
+                resolution=decision.resolution,
+                prompt_strategy=prompt_strategy,
+                aspect_ratio=aspect_ratio,
+            ),
+            routing=decision,
+        )
+
+    return plan
 
 
 class InvalidProposal(Exception):
@@ -397,7 +461,7 @@ def propose_novel(
     llm: LanguageModel,
     governor: BudgetGovernor,
     output: OutputRequirements,
-    production: ProductionDefaults,
+    production: ProductionDefaults | Planner,
     policy: AntiCloningPolicy | None = None,
 ) -> Experiment:
     """Ask the creative agent for a parentless candidate: a new idea for this
@@ -418,9 +482,20 @@ def propose_novel(
     )
 
     def accept(draft: CandidateDraft) -> Experiment:
-        genes = Genes.model_validate(
-            {**draft.creative_genes.model_dump(), **production.model_dump()}
-        )
+        values = draft.creative_genes.model_dump()
+        if isinstance(production, ProductionDefaults):
+            choice = ProductionChoice(genes=production)
+        else:
+            try:
+                choice = production(
+                    session,
+                    int(values["duration_seconds"]),
+                    output.aspect_ratio,
+                    output.audio_expected,
+                )
+            except NoEligibleModel as exc:
+                raise ValueError(f"{exc}; choose a duration a model can produce") from exc
+        genes = Genes.model_validate({**values, **choice.genes.model_dump()})
         spec = _new_story(session, ip, genes, draft.creative_spec, policy)
         genome = Genome(genes=genes, creative_spec=spec)
         check_genome_fits_output(genome, output)
@@ -436,6 +511,9 @@ def propose_novel(
             genome=genome,
             output=output,
             generation_reason=f"Novel exploration: {draft.rationale}",
+            production_plan=(
+                {"routing": choice.routing.model_dump(mode="json")} if choice.routing else None
+            ),
         )
 
     candidate, call_ids = _draft_until_valid(

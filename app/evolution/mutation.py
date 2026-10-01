@@ -54,6 +54,8 @@ def _descend(
         output=OutputRequirements.model_validate(parent.output_requirements),
         generation_reason=reason,
         lineage_id=parent.lineage_id,
+        # Production genes are inherited, so the plan that chose them is too.
+        production_plan=dict(parent.production_plan),
     )
     session.add(ExperimentParent(experiment=child, parent=parent, relation=relation))
     changed_genes = {difference.gene for difference in differences}

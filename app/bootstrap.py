@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.budgets.governor import BudgetGovernor, BudgetLimits
 from app.config import Settings
-from app.creative.candidates import ProductionDefaults
+from app.creative.candidates import routed_production
 from app.creative.jobs import creative_handlers
 from app.db import make_engine, registry
 from app.evolution.anti_cloning import AntiCloningPolicy
@@ -146,10 +146,12 @@ def build_job_handlers(settings: Settings) -> dict[str, JobHandler]:
             llm=llm,
             governor=deps.governor,
             output=DEFAULT_OUTPUT_REQUIREMENTS,
-            production=ProductionDefaults(
-                video_model=settings.default_video_model,
-                resolution=settings.default_resolution,
+            production=routed_production(
+                # Leave headroom under the per-video target for model calls.
+                target_cost_usd=settings.budget_target_per_video_usd,
+                max_cost_usd=settings.budget_max_per_generation_usd,
                 prompt_strategy=settings.default_prompt_strategy,
+                override=settings.video_model_override,
             ),
             policy=AntiCloningPolicy(max_surface_similarity=settings.anti_cloning_max_similarity),
         )

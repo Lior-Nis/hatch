@@ -44,10 +44,9 @@ class Settings(BaseSettings):
     media_provider: Literal["higgsfield", "fake"] = "higgsfield"
     higgsfield_api_key: SecretStr | None = None
     higgsfield_api_secret: SecretStr | None = None
-    # Production genes given to parentless candidates (until model routing
-    # chooses per candidate). Wan 3.0 at 480p is ~$0.05/s with native audio.
-    default_video_model: str = "alibaba/wan-3.0/text-to-video"
-    default_resolution: str = "480p"
+    # Model routing. The router picks the video model per candidate from the
+    # provider_models catalogue; set an override to force one model.
+    video_model_override: str | None = None
     default_prompt_strategy: str = "single_shot_v1"
     generation_poll_interval_seconds: float = 5.0
     generation_timeout_seconds: float = 900.0

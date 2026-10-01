@@ -6,7 +6,12 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.budgets.governor import BudgetExceeded, BudgetGovernor
-from app.creative.candidates import ProductionDefaults, propose_mutation, propose_novel
+from app.creative.candidates import (
+    Planner,
+    ProductionDefaults,
+    propose_mutation,
+    propose_novel,
+)
 from app.evolution.anti_cloning import AntiCloningPolicy
 from app.experiments.models import Experiment
 from app.experiments.spec import OutputRequirements
@@ -67,7 +72,7 @@ def creative_handlers(
     llm: LanguageModel,
     governor: BudgetGovernor,
     output: OutputRequirements,
-    production: ProductionDefaults,
+    production: ProductionDefaults | Planner,
     policy: AntiCloningPolicy | None = None,
 ) -> dict[str, JobHandler]:
     def guarded(propose: JobHandler) -> JobHandler:

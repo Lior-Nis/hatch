@@ -77,6 +77,9 @@ class Experiment(Evidence, Identified, Base):
     """Why this candidate exists, in words an operator can audit."""
     output_requirements: Mapped[JSONDict]
     """What the produced video must satisfy (see ``OutputRequirements``)."""
+    production_plan: Mapped[JSONDict] = mapped_column(default=dict)
+    """How production was planned: the model-routing decision with its reason,
+    fallbacks and the alternatives it rejected."""
     status: Mapped[ExperimentStatus] = mapped_column(
         enum_column(ExperimentStatus), default=ExperimentStatus.HYPOTHESIS_CREATED
     )

@@ -1,6 +1,7 @@
 """Creating experiments."""
 
 import uuid
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -36,6 +37,7 @@ def persist_candidate(
     output: OutputRequirements,
     generation_reason: str,
     lineage_id: uuid.UUID | None = None,
+    production_plan: dict[str, Any] | None = None,
 ) -> Experiment:
     """Persist hypothesis + genome + experiment as one candidate. A descendant
     passes its ancestor's ``lineage_id``; a novel candidate starts a new one."""
@@ -57,6 +59,7 @@ def persist_candidate(
         generation_reason=generation_reason,
         output_requirements=output.model_dump(mode="json"),
         lineage_id=lineage_id or uuid.uuid4(),
+        production_plan=production_plan or {},
     )
     session.add(experiment)
     # Hypothesis and genome exist, so the candidate is fully specified.

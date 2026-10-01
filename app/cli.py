@@ -32,8 +32,10 @@ from app.ips.catalog import INITIAL_IPS, seed_initial_ips
 from app.observability.health import find_stalls, provider_health
 from app.observability.logging import configure_logging
 from app.observability.trace import experiment_timeline, render_timeline
+from app.production.catalog import seed_provider_models
 from app.production.jobs import enqueue_production
 from app.production.models import Asset
+from app.production.routing import load_catalog
 from app.production.run import ProductionDeps, ProductionResult, produce_short
 from app.quality.runner import run_quality_gates
 from app.scheduling.models import JobRun, JobStatus
@@ -72,6 +74,17 @@ def seed_ips() -> None:
         session.commit()
         for definition in INITIAL_IPS:
             typer.echo(f"{definition.ip.slug}: {definition.ip.name} ({definition.ip.category})")
+
+
+@app.command("seed-models")
+def seed_models() -> None:
+    """Add missing video models to the routing catalogue (never overwrites edits)."""
+    with open_session(get_settings()) as session:
+        seed_provider_models(session)
+        session.commit()
+        for spec in load_catalog(session):
+            prices = ", ".join(f"{r} ${p}/s" for r, p in spec.usd_per_second.items())
+            typer.echo(f"{spec.provider} {spec.model}: {prices}")
 
 
 @app.command("run-fixture")

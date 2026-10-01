@@ -15,14 +15,17 @@ from app.creative.candidates import (
     propose_exploit,
     propose_mutation,
     propose_novel,
+    routed_production,
 )
 from app.creative.genome import GENE_SPECS, parse_genes
 from app.creative.hypotheses import Metric, Prediction
+from app.creative.memory import creative_genes_of
 from app.evolution.models import ExperimentParent, ParentRelation
 from app.experiments.fixtures import FIRST_SHORT
 from app.experiments.models import Experiment
 from app.llm.models import ModelCall
 from app.llm.ports import LLMRequest
+from app.production.catalog import seed_provider_models
 from integrations.fake.llm import FakeLanguageModel
 from tests.factories import LIMITS, make_experiment
 
@@ -391,3 +394,74 @@ def test_two_descendants_of_one_parent_cannot_tell_the_same_story(session: Sessi
 
     assert "too similar" in llm.requests[1].prompt
     assert sibling.genome.genes["topic"] == "why snails leave silver trails"
+
+
+# --- model routing for parentless candidates --------------------------------
+
+
+def test_novel_candidate_gets_its_model_from_the_router_and_keeps_the_decision(
+    session: Session,
+) -> None:
+    ip = make_experiment(session).ip
+    seed_provider_models(session)
+    planner = routed_production(
+        target_cost_usd=Decimal("0.50"),
+        max_cost_usd=Decimal("0.75"),
+        prompt_strategy="single_shot_v1",
+    )
+
+    candidate = propose_novel(
+        session, ip, llm=FakeLanguageModel([novel_draft()]), governor=governor(),
+        output=FIRST_SHORT.output, production=planner,
+    )  # fmt: skip
+
+    genes = parse_genes(candidate.genome.schema_version, candidate.genome.genes)
+    assert (genes.video_model, genes.resolution) == ("alibaba/wan-3.0/text-to-video", "480p")
+    routing = candidate.production_plan["routing"]
+    assert routing["model"] == genes.video_model
+    assert "target" in routing["reason"]
+    assert routing["fallbacks"]
+    assert any(c["rejected_because"] for c in routing["considered"])
+
+
+def test_routing_override_from_config_is_applied_and_recorded(session: Session) -> None:
+    ip = make_experiment(session).ip
+    seed_provider_models(session)
+    planner = routed_production(
+        target_cost_usd=Decimal("0.50"),
+        max_cost_usd=Decimal("0.75"),
+        prompt_strategy="single_shot_v1",
+        override="lightricks/ltx-2.5/text-to-video/fast",
+    )
+
+    candidate = propose_novel(
+        session, ip, llm=FakeLanguageModel([novel_draft()]), governor=governor(),
+        output=FIRST_SHORT.output, production=planner,
+    )  # fmt: skip
+
+    assert candidate.genome.genes["video_model"] == "lightricks/ltx-2.5/text-to-video/fast"
+    assert "override" in candidate.production_plan["routing"]["reason"]
+
+
+def test_descendants_inherit_their_parents_production_plan(session: Session) -> None:
+    ip = make_experiment(session).ip
+    seed_provider_models(session)
+    planner = routed_production(
+        target_cost_usd=Decimal("0.50"),
+        max_cost_usd=Decimal("0.75"),
+        prompt_strategy="single_shot_v1",
+    )
+    parent = propose_novel(
+        session, ip, llm=FakeLanguageModel([novel_draft()]), governor=governor(),
+        output=FIRST_SHORT.output, production=planner,
+    )  # fmt: skip
+    child_draft = draft(
+        creative_genes={**creative_genes_of(parent), "hook_type": "cold_open", **NEW_STORY}
+    )
+
+    child = propose_mutation(
+        session, parent, llm=FakeLanguageModel([child_draft]), governor=governor()
+    )
+
+    assert child.production_plan == parent.production_plan
+    assert child.genome.genes["video_model"] == parent.genome.genes["video_model"]
