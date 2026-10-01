@@ -15,6 +15,7 @@ from app.bootstrap import (
 )
 from app.config import Settings, get_settings
 from app.experiments.fixtures import FIRST_SHORT
+from app.experiments.lineage import ExperimentNotFound, get_lineage
 from app.experiments.models import Experiment
 from app.experiments.service import create_experiment
 from app.production.models import Asset
@@ -64,6 +65,17 @@ def produce(experiment_id: uuid.UUID) -> None:
         if session.get(Experiment, experiment_id) is None:
             _fail(f"no experiment with id {experiment_id}")
         _produce(session, settings, deps, experiment_id)
+
+
+@app.command()
+def lineage(experiment_id: uuid.UUID) -> None:
+    """Print, as JSON, why an experiment's video exists and how it was made."""
+    with open_session(get_settings()) as session:
+        try:
+            report = get_lineage(session, experiment_id)
+        except ExperimentNotFound:
+            _fail(f"no experiment with id {experiment_id}")
+        typer.echo(report.model_dump_json(indent=2))
 
 
 def _production_deps(settings: Settings) -> ProductionDeps:

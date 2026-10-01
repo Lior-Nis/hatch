@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -89,3 +90,19 @@ def test_run_fixture_works_in_a_fresh_interpreter(cli_env: Path) -> None:
 
     assert completed.returncode == 0, completed.stderr[-2000:]
     assert "video status: generated" in completed.stdout
+
+
+def test_lineage_command_prints_the_full_causal_record_as_json(
+    cli_env: Path, engine: Engine
+) -> None:
+    runner.invoke(app, ["run-fixture"])
+    with Session(engine) as session:
+        experiment_id = session.scalars(select(Experiment.id)).one()
+
+    result = runner.invoke(app, ["lineage", str(experiment_id)])
+
+    assert result.exit_code == 0, result.output
+    document = json.loads(result.output)
+    assert document["hypothesis"]["source"] == "fixture"
+    assert document["generation_attempts"][0]["status"] == "succeeded"
+    assert document["final_asset"]["mime_type"] == "video/mp4"
