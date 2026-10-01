@@ -327,3 +327,4 @@ separately on Wan 3.0 / Seedance 1.5; output pixel dimensions at "480p" 9:16; ki
 - https://higgsfield.ai/blog/credits-vs-unlimited-ai-video-generation
 - https://higgsfield.ai/creator-hub/help-center/integrations/how-do-i-access-higgsfield-via-cli
 - https://higgsfield.ai/creator-hub/help-center/integrations/how-do-i-connect-higgsfield-to-ai-agent
+

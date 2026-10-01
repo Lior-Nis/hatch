@@ -8,7 +8,10 @@ No code path may write to them.
 
 from decimal import Decimal
 from functools import lru_cache
+from pathlib import Path
+from typing import Literal
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +26,16 @@ class Settings(BaseSettings):
 
     env: str = "development"
     database_url: str = "postgresql+psycopg://hatch:hatch@localhost:54329/hatch"
+
+    # Generated media. Local filesystem until S3/R2 object storage is configured.
+    asset_dir: Path = Path("var/assets")
+
+    # Media generation. "fake" renders free synthetic test videos locally.
+    media_provider: Literal["higgsfield", "fake"] = "higgsfield"
+    higgsfield_api_key: SecretStr | None = None
+    higgsfield_api_secret: SecretStr | None = None
+    generation_poll_interval_seconds: float = 5.0
+    generation_timeout_seconds: float = 900.0
 
     # Budget contract (USD). Defaults are the PRD's initial production limits.
     budget_target_per_video_usd: Decimal = Decimal("0.50")
