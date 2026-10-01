@@ -8,6 +8,9 @@ Design rules:
 - Categorical genes are normalised tokens (``visual_question``), never prose,
   so they can be grouped, compared and mutated. The vocabulary is open: novelty
   may introduce a new token, but it must still be a token.
+- Creative genes are either *mechanism* (hook, archetype, pace, style: what a
+  hypothesis is about and what evolution controls) or *surface* (topic, cast,
+  lesson: what one particular video is about, which must be fresh every time).
 - Unknown genes are rejected, so a typo can never become an unanalysable gene.
 - Stored genomes are parsed by their ``schema_version``; an unknown version is
   refused rather than guessed at.
@@ -18,7 +21,7 @@ import json
 from enum import StrEnum
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints
 
 GENOME_SCHEMA_VERSION = 1
 
@@ -41,12 +44,18 @@ Text = Annotated[str, StringConstraints(min_length=1, max_length=300)]
 Ratio = Annotated[str, StringConstraints(pattern=r"^[1-9][0-9]*:[1-9][0-9]*$")]
 
 
-def _gene(group: GeneGroup, kind: GeneKind, **field: Any) -> Any:
-    return Field(json_schema_extra={"group": group.value, "kind": kind.value}, **field)
+def _gene(group: GeneGroup, kind: GeneKind, *, surface: bool = False, **field: Any) -> Any:
+    extra: dict[str, JsonValue] = {"group": group.value, "kind": kind.value, "surface": surface}
+    return Field(json_schema_extra=extra, **field)
 
 
 def _creative(kind: GeneKind, **field: Any) -> Any:
     return _gene(GeneGroup.CREATIVE, kind, **field)
+
+
+def _surface(kind: GeneKind, **field: Any) -> Any:
+    """A creative gene that is story content rather than mechanism."""
+    return _gene(GeneGroup.CREATIVE, kind, surface=True, **field)
 
 
 def _production(kind: GeneKind, **field: Any) -> Any:
@@ -58,10 +67,10 @@ class Genes(BaseModel):
 
     # --- creative genes: what the video is ---
     primary_character: Text = _creative(GeneKind.TEXT)
-    supporting_characters: tuple[Text, ...] = _creative(GeneKind.LIST, default=())
-    topic: Text = _creative(GeneKind.TEXT)
+    supporting_characters: tuple[Text, ...] = _surface(GeneKind.LIST, default=())
+    topic: Text = _surface(GeneKind.TEXT)
     story_archetype: Token = _creative(GeneKind.CATEGORICAL)
-    educational_goal: Text | None = _creative(GeneKind.TEXT, default=None)
+    educational_goal: Text | None = _surface(GeneKind.TEXT, default=None)
     hook_type: Token = _creative(GeneKind.CATEGORICAL)
     dominant_emotion: Token = _creative(GeneKind.CATEGORICAL)
     visual_style: Token = _creative(GeneKind.CATEGORICAL)
@@ -89,6 +98,14 @@ class GeneSpec(BaseModel):
     name: str
     group: GeneGroup
     kind: GeneKind
+    surface: bool = False
+    """Surface genes are what a particular video is about (topic, cast, lesson).
+    Every video should have a fresh surface. The remaining creative genes are
+    the *mechanism* — the reusable structure a hypothesis is about."""
+
+    @property
+    def mechanism(self) -> bool:
+        return self.group is GeneGroup.CREATIVE and not self.surface
 
 
 def _gene_specs() -> dict[str, GeneSpec]:
@@ -97,7 +114,10 @@ def _gene_specs() -> dict[str, GeneSpec]:
         extra = field.json_schema_extra
         assert isinstance(extra, dict), f"gene {name} is missing its group/kind"
         specs[name] = GeneSpec(
-            name=name, group=GeneGroup(str(extra["group"])), kind=GeneKind(str(extra["kind"]))
+            name=name,
+            group=GeneGroup(str(extra["group"])),
+            kind=GeneKind(str(extra["kind"])),
+            surface=bool(extra["surface"]),
         )
     return specs
 

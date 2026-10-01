@@ -12,12 +12,13 @@ from app.creative.candidates import (
     CandidateDraft,
     InvalidProposal,
     ProductionDefaults,
+    propose_exploit,
     propose_mutation,
     propose_novel,
 )
 from app.creative.genome import GENE_SPECS, parse_genes
 from app.creative.hypotheses import Metric, Prediction
-from app.evolution.models import ExperimentParent
+from app.evolution.models import ExperimentParent, ParentRelation
 from app.experiments.fixtures import FIRST_SHORT
 from app.experiments.models import Experiment
 from app.llm.models import ModelCall
@@ -40,10 +41,17 @@ def creative_genes(**changes: Any) -> dict[str, Any]:
     return {**creative, **changes}
 
 
+NEW_STORY = {"topic": "how rain makes music", "educational_goal": "rain makes sounds"}
+RAIN_SPEC = (
+    "Morning rain taps the roof of the hollow. Nib sets out three acorn cups and listens: "
+    "each one sings a different note as the drops fall. Nib arranges them into a tune."
+)
+
+
 def draft(**overrides: Any) -> CandidateDraft:
     fields: dict[str, Any] = {
-        "creative_genes": creative_genes(hook_type="cold_open"),
-        "creative_spec": "Open mid-action: Nib is already parting the fern as fireflies rise.",
+        "creative_genes": creative_genes(hook_type="cold_open", **NEW_STORY),
+        "creative_spec": RAIN_SPEC,
         "hypothesis_statement": "A cold open raises completion versus a visual question hook.",
         "rationale": "The parent's reveal lands late; starting inside the action removes the wait.",
         "metric": "completion_rate",
@@ -54,6 +62,10 @@ def draft(**overrides: Any) -> CandidateDraft:
     }
     fields.update(overrides)
     return CandidateDraft.model_validate(fields)
+
+
+def mechanism_mutations(experiment: Experiment) -> list[str]:
+    return sorted(m.gene for m in experiment.mutations if GENE_SPECS[m.gene].mechanism)
 
 
 def governor() -> BudgetGovernor:
@@ -130,9 +142,10 @@ def test_proposed_mutation_becomes_a_controlled_descendant(session: Session) -> 
     genes = parse_genes(child.genome.schema_version, child.genome.genes)
     assert genes.hook_type == "cold_open"
     assert genes.video_model == BASE.video_model  # production genes are inherited
-    assert [m.gene for m in child.mutations] == ["hook_type"]
+    assert mechanism_mutations(child) == ["hook_type"]
     assert child.lineage_id == parent.lineage_id
-    assert child.genome.creative_spec.startswith("Open mid-action")
+    assert child.genome.creative_spec == RAIN_SPEC
+    assert [link.relation for link in child.parents] == [ParentRelation.MUTATION]
 
 
 def test_the_model_sees_ip_context_parent_and_experiment_memory(session: Session) -> None:
@@ -168,18 +181,31 @@ def test_the_model_call_and_its_cost_are_attributed_to_the_new_candidate(session
 @pytest.mark.parametrize(
     ("bad", "problem"),
     [
-        ({"creative_genes": creative_genes()}, "no gene"),
+        ({"creative_genes": creative_genes(**NEW_STORY)}, "no mechanism gene"),
         ({"genes_under_test": ["pace"]}, "genes_under_test"),
+        ({"genes_under_test": ["topic"]}, "genes_under_test"),
         (
             {
                 "creative_genes": creative_genes(
-                    hook_type="cold_open", pace="brisk", music_style="ukulele", ending_type="twist"
+                    hook_type="cold_open",
+                    pace="brisk",
+                    music_style="ukulele",
+                    ending_type="twist",
+                    **NEW_STORY,
                 )
             },
             "at most",
         ),
-        ({"creative_genes": creative_genes(hook_type="Cold Open!")}, "hook_type"),
-        ({"creative_spec": FIRST_SHORT.genome.creative_spec}, "creative_spec"),
+        ({"creative_genes": creative_genes(hook_type="Cold Open!", **NEW_STORY)}, "hook_type"),
+        (
+            {
+                "creative_genes": creative_genes(hook_type="cold_open", topic="a glowing fern"),
+                "creative_spec": FIRST_SHORT.genome.creative_spec,
+            },
+            "too similar",
+        ),
+        ({"creative_genes": creative_genes(hook_type="cold_open")}, "its own topic"),
+        ({"creative_spec": "Nib meets Peppa Pig. " + RAIN_SPEC}, "Peppa Pig"),
     ],
 )
 def test_an_invalid_proposal_is_sent_back_with_the_problem_then_accepted(
@@ -192,13 +218,13 @@ def test_an_invalid_proposal_is_sent_back_with_the_problem_then_accepted(
 
     assert len(llm.requests) == 2
     assert problem in llm.requests[1].prompt
-    assert [m.gene for m in child.mutations] == ["hook_type"]
+    assert mechanism_mutations(child) == ["hook_type"]
     assert len(session.scalars(select(ModelCall)).all()) == 2
 
 
 def test_repeatedly_invalid_proposals_create_no_experiment(session: Session) -> None:
     parent = make_experiment(session)
-    bad = draft(creative_genes=creative_genes())
+    bad = draft(creative_genes=creative_genes(**NEW_STORY))
     llm = FakeLanguageModel([bad, bad, bad])
 
     with pytest.raises(InvalidProposal):
@@ -272,9 +298,13 @@ def test_novelty_prompt_shows_what_has_been_tried_so_it_can_avoid_it(session: Se
     assert "tiny_mystery" in prompt
 
 
-def test_a_novel_proposal_identical_to_an_existing_genome_is_sent_back(session: Session) -> None:
+def test_a_novel_proposal_that_retells_an_existing_story_is_sent_back(session: Session) -> None:
     existing = make_experiment(session)
-    copy = novel_draft(creative_genes=creative_genes(), genes_under_test=["hook_type"])
+    copy = novel_draft(
+        creative_genes=creative_genes(),
+        creative_spec=FIRST_SHORT.genome.creative_spec,
+        genes_under_test=["hook_type"],
+    )
     llm = FakeLanguageModel([copy, novel_draft()])
 
     candidate = propose_novel(
@@ -283,5 +313,81 @@ def test_a_novel_proposal_identical_to_an_existing_genome_is_sent_back(session: 
     )  # fmt: skip
 
     assert len(llm.requests) == 2
-    assert "already exists" in llm.requests[1].prompt
+    assert "too similar" in llm.requests[1].prompt
     assert candidate.genome.genes["hook_type"] == "sound_first"
+
+
+# --- exploitation: same mechanism, new story --------------------------------
+
+
+def exploit_draft(**overrides: Any) -> CandidateDraft:
+    fields: dict[str, Any] = {"creative_genes": creative_genes(**NEW_STORY)}
+    fields.update(overrides)
+    return draft(**fields)
+
+
+def test_exploit_keeps_every_mechanism_gene_and_tells_a_new_story(session: Session) -> None:
+    parent = make_experiment(session)
+    llm = FakeLanguageModel([exploit_draft()])
+
+    child = propose_exploit(session, parent, llm=llm, governor=governor())
+
+    assert mechanism_mutations(child) == []
+    assert {m.gene for m in child.mutations} == {"topic", "educational_goal"}
+    assert child.genome.creative_spec == RAIN_SPEC
+    assert child.lineage_id == parent.lineage_id
+    assert [link.relation for link in child.parents] == [ParentRelation.EXPLOIT]
+    assert llm.requests[0].purpose == "hypothesis_exploit"
+
+
+def test_exploit_retests_the_lineage_hypothesis_rather_than_inventing_one(session: Session) -> None:
+    parent = make_experiment(session)
+    llm = FakeLanguageModel([exploit_draft(metric="shares_per_view", genes_under_test=["pace"])])
+
+    child = propose_exploit(session, parent, llm=llm, governor=governor())
+
+    inherited = Prediction.model_validate(parent.hypothesis.prediction)
+    prediction = Prediction.model_validate(child.hypothesis.prediction)
+    assert prediction.metric is inherited.metric
+    assert prediction.genes_under_test == inherited.genes_under_test
+    assert prediction.minimum_relative_effect == inherited.minimum_relative_effect
+    assert prediction.compared_to == "ip_baseline"
+
+
+def test_replication_descendants_are_marked_as_such(session: Session) -> None:
+    parent = make_experiment(session)
+    llm = FakeLanguageModel([exploit_draft()])
+
+    child = propose_exploit(
+        session, parent, llm=llm, governor=governor(), relation=ParentRelation.REPLICATION
+    )
+
+    assert [link.relation for link in child.parents] == [ParentRelation.REPLICATION]
+    assert "Replication" in child.generation_reason
+
+
+def test_an_exploit_draft_that_changes_the_mechanism_is_sent_back(session: Session) -> None:
+    parent = make_experiment(session)
+    llm = FakeLanguageModel(
+        [exploit_draft(creative_genes=creative_genes(pace="brisk", **NEW_STORY)), exploit_draft()]
+    )
+
+    child = propose_exploit(session, parent, llm=llm, governor=governor())
+
+    assert "pace" in llm.requests[1].prompt
+    assert mechanism_mutations(child) == []
+
+
+def test_two_descendants_of_one_parent_cannot_tell_the_same_story(session: Session) -> None:
+    parent = make_experiment(session)
+    propose_exploit(session, parent, llm=FakeLanguageModel([exploit_draft()]), governor=governor())
+    fresh = exploit_draft(
+        creative_genes=creative_genes(topic="why snails leave silver trails"),
+        creative_spec="A snail glides over a leaf at dawn, leaving a shining path Nib follows.",
+    )
+    llm = FakeLanguageModel([exploit_draft(), fresh])
+
+    sibling = propose_exploit(session, parent, llm=llm, governor=governor())
+
+    assert "too similar" in llm.requests[1].prompt
+    assert sibling.genome.genes["topic"] == "why snails leave silver trails"

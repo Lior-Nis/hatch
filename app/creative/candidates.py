@@ -1,9 +1,13 @@
 """Creative agent: proposes candidates as explicit, falsifiable experiments.
 
-Two entry points:
+Three entry points, one per allocation bucket:
 
-- ``propose_mutation`` — a controlled descendant of a parent experiment.
+- ``propose_exploit``  — same mechanism as a proven parent, new story.
+- ``propose_mutation`` — 1–3 mechanism genes changed, new story.
 - ``propose_novel``    — a parentless candidate for an IP (novel exploration).
+
+Every candidate must tell a story the IP has not told (anti-cloning): Hatch
+evolves mechanisms, it does not copy surfaces.
 
 The language model drafts; Hatch decides. Every draft is validated against the
 genome schema and the experiment rules, and an invalid draft is sent back once
@@ -35,6 +39,8 @@ from app.creative.memory import (
     ip_experiments,
     knowledge_for,
 )
+from app.evolution.anti_cloning import AntiCloningPolicy, check_clone
+from app.evolution.models import ParentRelation
 from app.evolution.mutation import create_mutant
 from app.experiments.models import Experiment
 from app.experiments.service import persist_candidate
@@ -117,6 +123,12 @@ Safety is absolute and comes before engagement: gentle and warm, never frighteni
 peril, no violence, nothing a child could imitate unsafely, no adult themes, no \
 manipulation, and no resemblance to existing characters, brands or logos. Stay inside the \
 IP's world rules and safety constraints.
+
+Creative genes are of two kinds. Mechanism genes (hook_type, story_archetype, pace, \
+visual_style, music_style, ending_type and so on) are the reusable structure that \
+hypotheses are about. Surface genes (topic, educational_goal, supporting_characters) \
+and the creative_spec are what one particular video is about. Every candidate must tell \
+a story this IP has not told before: a new topic and new events, never a retelling.
 
 How to fill the draft:
 - Categorical gene values are lowercase snake_case tokens such as visual_question or \
@@ -213,11 +225,32 @@ def _draft_until_valid(
     raise InvalidProposal(problem)
 
 
-def propose_mutation(
-    session: Session, parent: Experiment, *, llm: LanguageModel, governor: BudgetGovernor
+def _new_story(
+    session: Session, ip: IP, genes: Genes, creative_spec: str, policy: AntiCloningPolicy
+) -> str:
+    """The candidate's creative spec, or ``ValueError`` if it clones the catalogue."""
+    spec = creative_spec.strip()
+    if not spec:
+        raise ValueError("creative_spec is empty")
+    verdict = check_clone(session, ip=ip, genes=genes, creative_spec=spec, policy=policy)
+    if verdict.blocked:
+        raise ValueError("; ".join(verdict.reasons))
+    return spec
+
+
+def _propose_descendant(
+    session: Session,
+    parent: Experiment,
+    *,
+    llm: LanguageModel,
+    governor: BudgetGovernor,
+    policy: AntiCloningPolicy,
+    purpose: str,
+    task: str,
+    relation: ParentRelation,
+    mechanism_changes: tuple[int, int],
+    inherit_prediction: bool,
 ) -> Experiment:
-    """Ask the creative agent for a controlled descendant of ``parent`` and
-    persist it with its hypothesis, mutations and lineage."""
     parent_genes = parse_genes(parent.genome.schema_version, parent.genome.genes)
     context, known = _context(session, parent.ip)
     prompt = "\n\n".join(
@@ -226,54 +259,135 @@ def propose_mutation(
             "## The parent experiment",
             _json(describe_experiment(parent)),
             "## Your task",
-            f"Propose a controlled descendant of experiment {parent.id}. Change between 1 and "
-            f"{MAX_MUTATED_GENES} creative genes and return every other creative gene exactly "
-            "as the parent has it. Rewrite creative_spec so it matches the changed genes. "
-            "The hypothesis compares this video against its parent, so genes_under_test must "
-            "name only genes you changed.",
+            task,
         ]
     )
+    fewest, most = mechanism_changes
 
     def accept(draft: CandidateDraft) -> Experiment:
         values = draft.creative_genes.model_dump()
         child_genes = Genes.model_validate({**parent_genes.model_dump(), **values})
         changed = [difference.gene for difference in diff_genes(parent_genes, child_genes)]
-        if not changed:
-            raise ValueError("no gene changed: a descendant must differ from its parent")
-        if len(changed) > MAX_MUTATED_GENES:
+        mechanism = [gene for gene in changed if GENE_SPECS[gene].mechanism]
+        if most == 0 and mechanism:
             raise ValueError(
-                f"change at most {MAX_MUTATED_GENES} genes so the experiment stays controlled "
-                f"(you changed {len(changed)}: {', '.join(changed)})"
+                "keep every mechanism gene exactly as the parent has it; you changed "
+                f"{', '.join(mechanism)}. Only the story (topic, educational_goal, "
+                "supporting_characters, creative_spec) may change"
             )
-        if not draft.genes_under_test or not set(draft.genes_under_test) <= set(changed):
+        if len(mechanism) < fewest:
             raise ValueError(
-                f"genes_under_test must name only genes you changed ({', '.join(changed)})"
+                "no mechanism gene changed: a mutation must change at least one of the "
+                "mechanism genes (hook_type, story_archetype, pace, ...)"
             )
-        spec = draft.creative_spec.strip()
-        if not spec or spec == parent.genome.creative_spec.strip():
-            raise ValueError("creative_spec must be rewritten to reflect the changed genes")
-        hypothesis = HypothesisSpec(
-            statement=draft.hypothesis_statement,
-            rationale=draft.rationale,
-            prediction=_prediction(draft, "parent", known),
-            source=f"creative_agent:{llm.model}",
-        )
+        if len(mechanism) > most:
+            raise ValueError(
+                f"change at most {most} mechanism genes so the experiment stays controlled "
+                f"(you changed {len(mechanism)}: {', '.join(mechanism)})"
+            )
+        if "topic" not in changed:
+            raise ValueError("give the new story its own topic: it must differ from the parent's")
+        spec = _new_story(session, parent.ip, child_genes, draft.creative_spec, policy)
+        if inherit_prediction:
+            # Re-test the lineage's claim on a new story instead of inventing one.
+            inherited = Prediction.model_validate(parent.hypothesis.prediction)
+            prediction = inherited.model_copy(
+                update={
+                    "compared_to": "ip_baseline",
+                    "evidence_experiment_ids": (parent.id, *_evidence_ids(draft, known)),
+                }
+            )
+        else:
+            if not draft.genes_under_test or not set(draft.genes_under_test) <= set(mechanism):
+                raise ValueError(
+                    "genes_under_test must name only mechanism genes you changed "
+                    f"({', '.join(mechanism)})"
+                )
+            prediction = _prediction(draft, "parent", known)
         return create_mutant(
             session,
             parent,
             changes={gene: getattr(child_genes, gene) for gene in changed},
-            hypothesis=hypothesis,
+            hypothesis=HypothesisSpec(
+                statement=draft.hypothesis_statement,
+                rationale=draft.rationale,
+                prediction=prediction,
+                source=f"creative_agent:{llm.model}",
+            ),
             rationale=draft.rationale,
             creative_spec=spec,
+            relation=relation,
         )
 
     child, call_ids = _draft_until_valid(
-        session, llm, governor, purpose="hypothesis_mutation", prompt=prompt, accept=accept
+        session, llm, governor, purpose=purpose, prompt=prompt, accept=accept
     )
     attribute_to_experiment(session, call_ids, child)
     session.commit()
     assert isinstance(child, Experiment)
     return child
+
+
+def propose_mutation(
+    session: Session,
+    parent: Experiment,
+    *,
+    llm: LanguageModel,
+    governor: BudgetGovernor,
+    policy: AntiCloningPolicy | None = None,
+) -> Experiment:
+    """A controlled descendant: 1–3 mechanism genes changed, tested against
+    the parent, told through a new story."""
+    return _propose_descendant(
+        session,
+        parent,
+        llm=llm,
+        governor=governor,
+        policy=policy or AntiCloningPolicy(),
+        purpose="hypothesis_mutation",
+        task=(
+            f"Propose a controlled descendant of experiment {parent.id}. Change between 1 and "
+            f"{MAX_MUTATED_GENES} mechanism genes and return every other mechanism gene exactly "
+            "as the parent has it. Tell a new story (new topic, new creative_spec) that carries "
+            "the changed mechanism. The hypothesis compares this video against its parent, so "
+            "genes_under_test must name only mechanism genes you changed."
+        ),
+        relation=ParentRelation.MUTATION,
+        mechanism_changes=(1, MAX_MUTATED_GENES),
+        inherit_prediction=False,
+    )
+
+
+def propose_exploit(
+    session: Session,
+    parent: Experiment,
+    *,
+    llm: LanguageModel,
+    governor: BudgetGovernor,
+    policy: AntiCloningPolicy | None = None,
+    relation: ParentRelation = ParentRelation.EXPLOIT,
+) -> Experiment:
+    """Another video in a proven lineage: the parent's mechanism, unchanged,
+    carried by a new story. With ``relation=REPLICATION`` it is one of the
+    controlled descendants that test whether a potential winner reproduces."""
+    return _propose_descendant(
+        session,
+        parent,
+        llm=llm,
+        governor=governor,
+        policy=policy or AntiCloningPolicy(),
+        purpose="hypothesis_exploit",
+        task=(
+            f"Propose another video in the lineage of experiment {parent.id}. Keep every "
+            "mechanism gene exactly as the parent has it: the point is to learn whether this "
+            "mechanism works again with different content. Tell a new story (new topic, new "
+            "creative_spec, optionally a new educational_goal or supporting cast). In "
+            "hypothesis_statement, say why this mechanism should work for the new story."
+        ),
+        relation=relation,
+        mechanism_changes=(0, 0),
+        inherit_prediction=True,
+    )
 
 
 def propose_novel(
@@ -284,11 +398,12 @@ def propose_novel(
     governor: BudgetGovernor,
     output: OutputRequirements,
     production: ProductionDefaults,
+    policy: AntiCloningPolicy | None = None,
 ) -> Experiment:
     """Ask the creative agent for a parentless candidate: a new idea for this
     IP that does not extend any existing experiment."""
     context, known = _context(session, ip)
-    existing = [parse_genes(e.genome.schema_version, e.genome.genes) for e in known]
+    policy = policy or AntiCloningPolicy()
     prompt = "\n\n".join(
         [
             context,
@@ -306,14 +421,8 @@ def propose_novel(
         genes = Genes.model_validate(
             {**draft.creative_genes.model_dump(), **production.model_dump()}
         )
-        if any(not diff_genes(genes, other) for other in existing):
-            raise ValueError(
-                "a candidate with exactly these genes already exists in this IP; propose "
-                "something new"
-            )
-        if not draft.creative_spec.strip():
-            raise ValueError("creative_spec is empty")
-        genome = Genome(genes=genes, creative_spec=draft.creative_spec.strip())
+        spec = _new_story(session, ip, genes, draft.creative_spec, policy)
+        genome = Genome(genes=genes, creative_spec=spec)
         check_genome_fits_output(genome, output)
         return persist_candidate(
             session,

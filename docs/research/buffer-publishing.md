@@ -1,10 +1,9 @@
 # Buffer as Hatch's publishing backend (research, 2026-10-01)
 
 Scope: can a Python `Publisher` adapter (schedule / publish now / cancel / get status) push one MP4 to YouTube Shorts,
-TikTok, Instagram Reels and Facebook Reels through Buffer, for 3 brands (~12 channels, ~24 posts/day).
-Read-only: no account created, nothing logged into or posted. The only live calls were unauthenticated GraphQL
-introspection of `https://api.buffer.com` (it answers without a token). Sources are dated 2026 unless flagged.
-Tags: **[V]** verified in a primary source I read, **[I]** inferred, **[?]** unknown.
+TikTok, Instagram Reels and Facebook Reels via Buffer for 3 brands (~12 channels, ~24 posts/day)? Read-only research:
+no account, login or post; the only live calls were unauthenticated GraphQL introspection of `https://api.buffer.com`.
+Sources are from 2026 unless flagged. Tags: **[V]** verified in a primary source I read, **[I]** inferred, **[?]** unknown.
 
 ## 0. Findings that change the plan
 1. **Buffer has a self-serve public API again**: GraphQL at `https://api.buffer.com`, personal API key, every plan incl.
@@ -22,11 +21,10 @@ Tags: **[V]** verified in a primary source I read, **[I]** inferred, **[?]** unk
 | Current API | GraphQL, one endpoint `POST https://api.buffer.com`, body `{"query", "variables"}` [V] |
 | Status | Docs carry no beta label and say "available on every Buffer plan"; schema changelog has entries from 2026-01-28 to 2026-10-01. No explicit "GA" statement found [?]. Some fields/mutations are tagged Experimental or Preview [V]. |
 | Legacy REST v1 | "will be retired on February 1, 2027"; existing apps only [V] |
-| Token | Personal API key: Settings -> API -> Personal Access -> "+ New Key" (`publish.buffer.com/settings/api`); header `Authorization: Bearer <key>` [V] |
+| Token | Personal API key: Settings -> API -> Personal Access -> "+ New Key" (`publish.buffer.com/settings/api`); header `Authorization: Bearer <key>`. Self-serve, no approval or waitlist [V] |
 | Key rules | Org **owner** only; verified account email; expiry is mandatory: 7/30/60/90 days or **1 year max**; permissions `postsRead postsWrite ideasRead ideasWrite accountRead accountWrite insightsRead` [V] |
 | Key scope | Acts for the account across all its organizations and channels [V] |
 | OAuth | OAuth 2.0 Authorization Code + PKCE "App Clients" (`auth.buffer.com`), self-registered; meant for acting on other users' accounts; cannot hold `insightsRead`. Not needed for Hatch [V] |
-| Approval / waitlist | None; self-serve [V] |
 | Tooling | CLI `npm i -g @bufferapp/cli` (`BUFFER_API_KEY`), MCP server, browser explorer [V]; no Python SDK mentioned [I] |
 
 | Rolling window, per client [V] | Free | Essentials | Team |
@@ -36,8 +34,8 @@ Tags: **[V]** verified in a primary source I read, **[I]** inferred, **[?]** unk
 
 - "Usage is shared across all your personal API keys as a group": extra keys add no quota [V].
 - Every response carries `RateLimit` / `RateLimit-Policy` headers. Over limit: HTTP 429, `Retry-After`,
-  `extensions.code = RATE_LIMIT_EXCEEDED`; a 429 costs no quota, other failed requests do [V].
-- Query limits: cost 175,000 points, depth 25, 30 aliases [V]. More quota: developersupport@buffer.com [V].
+  `extensions.code = RATE_LIMIT_EXCEEDED`; a 429 costs no quota, other failed requests do. More quota: ask
+  developersupport@buffer.com [V].
 - Hatch budget [I]: 24 `createPost` + one batched `posts` poll every 15 min (96) = 120 req/day, 3,600 per 30 d.
   Polling each post separately would exceed 250/day.
 
@@ -100,9 +98,8 @@ mutation Create($input: CreatePostInput!) { createPost(input: $input) {
 | Instagram Reels | 5 s - 15 min | 300 MB | 4:5 to 9:16; video 25 Mbps max, audio 128 kbps max |
 | Facebook Reels | 3 - 90 s | 1 GB | 9:16; MP4 |
 
-Safe canonical file [I]: MP4 (H.264/AAC), 9:16, 5-90 s, under 300 MB, 24-60 fps. These are composer limits; that the
-API enforces the same ones is [I]. The experimental `configuration` query exposes per-channel `FileSizeRule`,
-`DurationRule`, `FormatRule` if live limits are wanted [V].
+Safe canonical file [I]: MP4 (H.264/AAC), 9:16, 5-90 s, under 300 MB, 24-60 fps. That the API enforces these composer
+limits is [I]; the experimental `configuration` query exposes per-channel `FileSizeRule` / `DurationRule` / `FormatRule` [V].
 
 **2.3 Publish now.** New post: same mutation with `"mode": "shareNow"`, no `dueAt` [V]. Existing scheduled post:
 `editPost(input:{ id, mode: shareNow })`; the schema says a non-null `mode` "applies that mode" and
@@ -130,7 +127,6 @@ query Poll($org: OrganizationId!, $since: DateTime!) { posts(first: 50, input: {
 `createdAt` `{start,end}`, `tagIds`, `postTypes`; there is no filter by a list of post ids [V].
 
 **2.6 Native post id / permalink**
-
 - `Post.externalLink` = "The external URL of the post at the destination service" [V]. No webhook: "There are no
   webhooks, so keeping data in sync means polling" [V].
 - No native-id field on `Post` (all 28 fields checked by introspection) [V].
@@ -149,7 +145,6 @@ query Poll($org: OrganizationId!, $since: DateTime!) { posts(first: 50, input: {
 - The only idempotent write is `createContentItemDraft.correlationId` (client UUID; a retry "returns the first
   content item in its current state") [V]. Draft, then `promoteContentItemDraftToPosts` (fails with
   `ContentItemStateError` once promoted) would give at-most-once creation [I]; both are Experimental [V].
-- A suggestion-board report says Buffer blocks duplicate content via the API [?: user report, undated]. Do not rely on it.
 
 ## 4. Automatic publishing per platform
 `schedulingType: automatic` = "Buffer's publishing workers send the post, with nobody having to act"; `notification` =
@@ -194,31 +189,25 @@ phone reminder [V]. Read `schedulingType` back from the mutation and assert `aut
   enum notes; real per-platform coverage is [?]. Verdict [I]: a coarse daily fallback, not Hatch's primary source.
 
 ## 7. Alternatives (for the human to weigh; Buffer stays the default)
-- **Zernio** (formerly Late / getlate.dev, which now 301-redirects there). API-first REST. First 2 accounts free, accounts
-  3-10 $6/mo, 11-100 $3/mo, so 12 accounts = $54/mo [V prices, I total]. `Idempotency-Key` header (24 h), `platformPostUrl`
-  on get/list, presigned upload to 5 GB, webhooks, retry/unpublish endpoints, TikTok and YouTube option blocks [V].
-  Best fit on paper; young product with a fast-growing surface (ads, SMS).
-- **Ayrshare**. Mature REST API, billed per "social profile" = one brand across all networks: Premium $149/mo (1),
-  Launch $299/mo (up to 10, 28-day trial), Business from $599/mo [V]. Three brands = $299/mo. `POST /post` with
-  `mediaUrls`, `scheduleDate`, `youTubeOptions.madeForKids`, `idempotencyKey`; response `postIds[]` with native `id`
-  and `postUrl` [I: docs read through a summarising fetcher].
-- **Upload-Post**. REST `POST https://api.upload-post.com/api/upload` (multipart), Python SDK. A "profile" = one
-  account per platform (3 brands = 3 profiles). Free: 2 profiles, 10 uploads/mo, **no TikTok**; Basic $24/mo
-  (5 profiles); Professional $50/mo (25) [V]. Status by `request_id` returns `platform_post_id` and `post_url`
-  [V]. Small vendor; no idempotency key found [?].
-- **Postiz**. Open source (self-host) or cloud at $29/mo (5 channels), $39 (10), $49 (30), $99 (100); API, CLI, MCP,
-  webhooks on every plan; 12 channels = $49/mo [V]. Public API capped at 90 requests/hour; upload endpoint;
-  `type: schedule|now` [V]. Whether it returns the native id/URL is [?]. Self-hosting means owning each platform's
-  developer app and review [I].
-- **Publer**. API only on Business and Enterprise, Bearer token, 100 requests per 2 min [I: docs via summarising
-  fetcher]. Per-account pricing is rendered client-side; secondary sources say roughly $10/mo for the first account
-  plus about $7 per extra on Business [?].
-- **Metricool**. Priced per brand; the API ("Metricool API (Zapier, Make)") starts at Advanced, up to 15 brands for
-  $53/mo [V]. Analytics-first; its publishing API shape, native ids and idempotency were not checked [?].
+- **Zernio** (formerly Late / getlate.dev, which 301-redirects there). API-first REST. 2 accounts free, accounts 3-10
+  $6/mo, 11-100 $3/mo: 12 accounts = $54/mo [V prices, I total]. `Idempotency-Key` header (24 h), `platformPostUrl` on
+  get/list, presigned upload to 5 GB, webhooks, retry/unpublish, `tiktokSettings` [V]. Best fit on paper; young product.
+- **Ayrshare**. Mature REST API billed per "social profile" (one brand across all networks): Premium $149/mo (1),
+  Launch $299/mo (up to 10; 28-day trial), Business from $599/mo [V]; 3 brands = $299/mo. `POST /post` takes `mediaUrls`,
+  `scheduleDate`, `youTubeOptions.madeForKids`, `idempotencyKey`; returns `postIds[]` with native `id` + `postUrl` [I].
+- **Upload-Post**. REST `POST https://api.upload-post.com/api/upload` (multipart), Python SDK. "Profile" = one account
+  per platform (3 brands = 3). Free: 2 profiles, 10 uploads/mo, **no TikTok**; Basic $24/mo (5); Professional $50/mo
+  (25) [V]. Status by `request_id` returns `platform_post_id` + `post_url` [V]. Small vendor; idempotency key [?].
+- **Postiz**. Open source (self-host) or cloud: $29/mo (5 channels), $39 (10), $49 (30), $99 (100), API + webhooks on
+  every plan; 12 channels = $49/mo [V]. Public API capped at 90 requests/hour, has an upload endpoint [V]. Native
+  id/URL in responses [?]. Self-hosting means owning each platform's developer app and review [I].
+- **Publer**. API only on Business/Enterprise, Bearer token, 100 requests per 2 min [I]. Pricing renders client-side;
+  secondary sources say about $10/mo for the first account plus about $7 per extra on Business [?].
+- **Metricool**. Priced per brand; "Metricool API (Zapier, Make)" starts at Advanced, up to 15 brands for $53/mo [V].
+  Analytics-first; publishing API shape, native ids and idempotency not checked [?].
 
 ## 8. Recommendation: minimum path to one MP4 on four platforms for one brand
 Human actions, in order:
-
 1. Create a Buffer account as organization **owner** and verify the email.
 2. Prepare the brand's accounts: YouTube channel (signed in as Owner; verify the YouTube account), TikTok account,
    Instagram **Business/Creator** account, Facebook **Page** with Full control.
@@ -235,27 +224,27 @@ The adapter then needs: `BUFFER_API_KEY` (expires within a year), the media base
 brand four `channelId`s with their `service` (discoverable via 2.1, stored as config). Per publication it persists the
 Buffer `post.id`, `status`, `dueAt`, `sentAt`, `externalLink`, the derived native id and `error.message`.
 
-First live test [I]: (a) run 2.1 and assert `isDisconnected=false`, `defaultToReminders=false`; (b) `createPost` with
-`saveToDraft: true` per channel to validate payloads without publishing; (c) one `customScheduled` post per channel
-10 minutes out; (d) poll, record the `externalLink` format per platform and confirm `schedulingType` stayed
-`automatic`; (e) inspect the TikTok post's privacy/comment settings by hand.
+First live test [I]: (a) run 2.1, assert `isDisconnected=false` and `defaultToReminders=false`; (b) `createPost` with
+`saveToDraft: true` per channel to validate payloads without publishing; (c) one `customScheduled` post per channel 10
+min out; (d) poll, record each `externalLink` format, confirm `schedulingType` stayed `automatic`; (e) check the TikTok
+post's privacy/comment settings by hand.
 
 ## 9. Verified vs inferred vs unknown
-**Verified** (primary source read 2026-10-01): endpoint and Bearer auth; key rules and expiry; OAuth option; plan
-availability; rate limits and headers; legacy REST retirement date; every type, field and enum name in section 2
-(docs reference, live introspection, static validation); media-by-URL rule; no webhooks; no idempotency key;
-`externalLink`; automatic vs notification semantics; account-type requirements; daily posting caps; media specs;
-Buffer price tiers and Free limits; metrics fields and their "experimental" caveat; prices of Zernio, Upload-Post,
-Postiz, Ayrshare, Metricool. No kids/COPPA flag exists in the schema for any network except YouTube.
+**Verified** (primary source read 2026-10-01): endpoint, auth, key rules, plan availability, rate limits, legacy REST
+retirement date; every type, field and enum name in section 2 (docs reference, live introspection, static validation);
+media-by-URL rule; no webhooks; no idempotency key; `externalLink`; automatic vs notification semantics; account-type
+requirements; posting caps; media specs; Buffer prices and Free limits; metrics fields and their "experimental"
+caveat; prices of Zernio, Upload-Post, Postiz, Ayrshare, Metricool. The schema has a kids flag for YouTube only.
 
 **Inferred**: 12-channel cost; request budget; `editPost(mode: shareNow)` on an existing post; no permalink in the
 mutation response; deriving native ids from permalinks; API media limits equal composer limits; draft+promote as an
-at-most-once path; canonical MP4 profile; Ayrshare and Publer API details.
+at-most-once path; canonical MP4 profile; Ayrshare and Publer API details (read via a summarising fetcher).
 
 **Unknown** (needs a live test or a question to Buffer): whether the API is formally GA; `externalLink` format per
-platform and its delay after `sent`; the TikTok privacy / comment / duet / stitch values Buffer applies; whether
-TikTok needs the media domain verified; whether media is fetched only at publish time; what `deletePost` does to a
-sent post; whether the trial needs a card; metric coverage for Reels; duplicate-content detection; Publer pricing.
+platform and its delay after `sent`; the TikTok privacy / comment / duet / stitch values Buffer applies; whether TikTok
+needs the media domain verified; whether media is fetched only at publish time; what `deletePost` does to a sent
+post; whether the trial needs a card; metric coverage for Reels; Publer pricing; a user report (undated) that Buffer
+blocks duplicate content via the API.
 
 ## Sources
 - Buffer developer docs, raw markdown under `https://developers.buffer.com/`: `llms.txt`, `reference.md`, `changelog.md`,

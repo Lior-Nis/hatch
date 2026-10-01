@@ -33,6 +33,7 @@ def _descend(
     rationale: str,
     creative_spec: str | None,
     reason: str,
+    relation: ParentRelation = ParentRelation.MUTATION,
 ) -> Experiment:
     unknown = set(changes) - set(GENE_SPECS)
     if unknown:
@@ -54,7 +55,7 @@ def _descend(
         generation_reason=reason,
         lineage_id=parent.lineage_id,
     )
-    session.add(ExperimentParent(experiment=child, parent=parent, relation=ParentRelation.MUTATION))
+    session.add(ExperimentParent(experiment=child, parent=parent, relation=relation))
     changed_genes = {difference.gene for difference in differences}
     donors = {source.id: source for gene, source in sources.items() if gene in changed_genes}
     for donor in donors.values():
@@ -88,8 +89,11 @@ def create_mutant(
     hypothesis: HypothesisSpec,
     rationale: str,
     creative_spec: str | None = None,
+    relation: ParentRelation = ParentRelation.MUTATION,
 ) -> Experiment:
-    """A descendant of ``parent`` with only the genes in ``changes`` altered."""
+    """A descendant of ``parent`` with only the genes in ``changes`` altered.
+    ``relation`` says why it exists: a mutation of the mechanism, an exploit of
+    a proven lineage, or a replication of a potential winner."""
     changed = ", ".join(sorted(changes)) or "nothing"
     return _descend(
         session,
@@ -99,7 +103,8 @@ def create_mutant(
         hypothesis=hypothesis,
         rationale=rationale,
         creative_spec=creative_spec,
-        reason=f"Mutation of experiment {parent.id} ({changed}): {rationale}",
+        reason=f"{relation.value.capitalize()} of experiment {parent.id} ({changed}): {rationale}",
+        relation=relation,
     )
 
 

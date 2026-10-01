@@ -2,9 +2,8 @@
 
 Scope: what Hatch's analytics adapters can read from the platforms' official APIs for the operator's own short videos, how fresh it is, what access is
 needed, and what kids/AI policy constrains the product. Read-only research: no accounts created, nothing logged in, nothing posted. Tags: **[V]**
-verified in a primary source fetched today,
-**[V*]** verified on a Meta page read through an HTML-to-text summariser (Meta blocks raw fetches; re-check wording at implementation), **[I]**
-inferred, **[?]** unknown. Sources are numbered in section 9.
+verified in a primary source fetched today, **[V*]** verified on a Meta page read through an HTML-to-text summariser (Meta blocks raw fetches; re-check
+wording at implementation), **[I]** inferred, **[?]** unknown. Bracketed numbers refer to the sources in section 10.
 
 ## 0. Findings that change the plan
 
@@ -44,7 +43,6 @@ inferred, **[?]** unknown. Sources are numbered in section 9.
 | follows gained | yes, lagged | Business API only | no for Reels | yes |
 
 ## 2. (A) YouTube: Data API v3 + YouTube Analytics API
-
 ### 2.1 Metrics
 | API field / metric | Normalized signal | Notes |
 |---|---|---|
@@ -63,7 +61,6 @@ inferred, **[?]** unknown. Sources are numbered in section 9.
 
 Not available by API: Shorts-feed impressions, "viewed vs swiped away", completion rate as a metric [V by absence from [3][4]]. Use
 `dimensions=creatorContentType` (`SHORTS`) to confirm a video is classified as a Short [V][6].
-
 ### 2.2 Freshness
 - Analytics: "Data processing typically introduces a latency of 48 to 72 hours ... the `endDate` of your report only includes data up until the last
   day for which all requested metrics are fully processed"; Google's own advice for current counts is `videos.list` (doc section added 2026-09-09)
@@ -71,10 +68,9 @@ Not available by API: Shorts-feed impressions, "viewed vs swiped away", completi
 - Reporting API (bulk): first report available within 48h of creating the job; daily files, backfills replace data [V][5].
 - Data API counters: documented as the "real-time" option [V][7]; exact refresh cadence [?].
 - So: 1h/6h/24h = `viewCount`, `likeCount`, `commentCount` only. 72h = first partial Analytics row. 7d/30d = full.
-
 ### 2.3 Auth, access, quota
 - Scopes: `https://www.googleapis.com/auth/yt-analytics.readonly` (Analytics) and `youtube.readonly` (Data API) [V][8].
-  `yt-analytics-monetary.readonly` returns HTTP 403 for non-YPP channels [V][2].
+  Revenue metrics (`yt-analytics-monetary.readonly`) return HTTP 403 for non-YPP channels [V][2]; do not request them.
 - `ids=channel==MINE` or `channel==CHANNEL_ID` of the authenticated user's channel [V][8]. One Cloud project/OAuth client can hold a refresh token per
   channel (limit 100 refresh tokens per Google account per client) [V][9]; with Brand Accounts the channel is chosen on the consent screen [I].
 - Verification: apps for personal use with fewer than 100 users can stay unverified (click through the "unverified app" screen) [V][11]. But in
@@ -84,13 +80,11 @@ Not available by API: Shorts-feed impressions, "viewed vs swiped away", completi
 - Quota: 10,000 units/day default; `videos.list`, `playlistItems.list`, `channels.list` cost 1 unit each; `search.list` and `videos.insert` have
   separate 100/day buckets [V][13]. 144 polls/day batched (up to 50 ids per `videos.list` call [I]) is well under 1% of quota. Analytics API quota
   numbers [?] (visible in Cloud console).
-- Compliance audit is needed only to raise quota above default (and, separately, for public uploads from new API projects) [V][13]; not needed for
-  reading [I].
+- A compliance audit is required only to request quota above the default [V][13]; nothing in the docs requires one for read-only use [I].
 
 ## 3. (B) TikTok: Display API vs API for Business (Accounts API)
 
 Research API is for researchers/public data and does not apply (scopes `research.*`) [V][14].
-
 ### 3.1 Metrics
 | API field | Normalized signal | Notes |
 |---|---|---|
@@ -105,7 +99,6 @@ Research API is for researchers/public data and does not apply (scopes `research
 | Business `video_view_retention` (second, percentage), `engagement_likes`, `impression_sources`, `audience_*` | retention curve, traffic sources | [V][17] |
 
 Not available: impressions (feed exposures) on either API; anything beyond the four counters on the Display API.
-
 ### 3.2 Freshness
 - Business API: `video_views`, `likes`, `comments`, `shares`, `reach`, watch-time and completion fields have **"24-48 hours (UTC Time)"** latency;
   ids/caption/`create_time` have none [V][18]. Metrics are lifetime aggregates; "post data will stop updating 365 days after the post is published"
@@ -113,7 +106,6 @@ Not available: impressions (feed exposures) on either API; anything beyond the f
 - Watch-time/reach fields go missing if the video "has not been active ... for more than 7 days" [V][17]: the 30d snapshot may come back empty for
   dead posts. Analytics must be turned on once in the mobile app [V][17].
 - Display API counter latency is not documented [?]; assumed near-live [I]. It is the only source for 1h/6h.
-
 ### 3.3 Auth, access, limits
 - Display API (developers.tiktok.com): Login Kit OAuth; access token 24h, refresh token 365 days [V][19]. **Sandbox** needs no app review, allows up
   to 10 target accounts you own, up to 5 sandboxes [V][20]. Production requires app review with a public website, privacy policy/ToS and a demo video;
@@ -128,7 +120,6 @@ Not available: impressions (feed exposures) on either API; anything beyond the f
   extended on use, or needs yearly manual re-consent [?].
 
 ## 4. (C) Instagram Reels: Instagram Platform (Graph API)
-
 ### 4.1 Metrics (`GET /{ig-media-id}/insights?metric=...`, all `lifetime`)
 | Metric / field | Normalized signal | Notes |
 |---|---|---|
@@ -144,11 +135,9 @@ Not available: impressions (feed exposures) on either API; anything beyond the f
 Not available for Reels: `follows`, `profile_visits`, `profile_activity` (FEED and STORY only) [V*][27]; impressions (`impressions` deprecated for
 media created after 2024-07-02; `plays`, `clips_replays_count`, `ig_reels_aggregated_all_plays_count` deprecated for all versions 2025-04-21)
 [V*][27][28]; completion rate; retention curve. Follows gained must be derived from account-level follower count deltas [I].
-
 ### 4.2 Freshness
 "Data used to calculate metrics can be delayed up to 48 hours"; unavailable data returns an empty data set rather than 0; metrics stored up to 2 years
 [V*][27]. Media-node counters assumed near-live [I]. Insights webhooks are not supported with Instagram Login [V*][27], so polling is the only option.
-
 ### 4.3 Auth, access, limits
 - Account must be an Instagram professional (business or creator) account; with Instagram Login no Facebook Page is required [V*][30].
 - Instagram Login: scopes `instagram_business_basic` + `instagram_business_manage_insights`, host `graph.instagram.com` [V*][27][31]. Facebook Login
@@ -164,7 +153,6 @@ media created after 2024-07-02; `plays`, `clips_replays_count`, `ig_reels_aggreg
 - One Meta app covers all 3 IG accounts and all 3 Pages [I].
 
 ## 5. (D) Facebook Reels: Graph API video insights
-
 ### 5.1 Metrics (`GET /{video-id}/video_insights`, Page access token, all `lifetime`)
 | Metric | Normalized signal | Notes |
 |---|---|---|
@@ -181,12 +169,10 @@ media created after 2024-07-02; `plays`, `clips_replays_count`, `ig_reels_aggreg
 Not available: impressions/reach after the 2026 deprecation (replacement for Reels [?]; `post_media_view` / `post_total_media_view_unique` exist on
 Page posts but the Page Insights doc says "Interactions on Reels are not included") [V*][38]; saves [I]. The classic `total_video_*` metrics (3s
 views, 97% complete views) are documented for videos, not Reels [V*][36]; whether they return data for a Reel [?].
-
 ### 5.2 Freshness
 Page Insights: "Most metrics will update once every 24 hours"; only the last two years available; **"Page Insights data is only available on Pages
 with 100 or more likes"** [V*][38]. Whether the 100-likes gate and the 24h cadence apply to `/video_insights` on Reels [?]: test with the first brand
 before relying on FB data.
-
 ### 5.3 Auth, access, limits
 - Permissions: `pages_show_list`, `pages_read_engagement`, `read_insights`; Page access token from a person who can perform the ANALYZE task
   [V*][32][39]. Standard Access as in 4.3 (operator is app admin and Page admin) [V*][33].
@@ -208,7 +194,7 @@ before relying on FB data.
 |---|---|---|
 | YouTube | `youtube.com/shorts/{videoId}` or `watch?v={videoId}` | `channels.list(mine=true, part=contentDetails)` -> uploads playlist -> `playlistItems.list` (1 unit); match `publishedAt` + title [V][13] |
 | TikTok | `tiktok.com/@{user}/video/{id}`; `id` = Display `id` = Business `item_id` [I] | `/v2/video/list/` (sorted by `create_time` desc, 20/page) or `/business/video/list/`; match `create_time` + caption prefix (150-char cap) [V][15][17] |
-| Instagram | `instagram.com/reel/{shortcode}`; shortcode is **not** the media id [V*][29] | `GET /{ig-user-id}/media?fields=id,shortcode,permalink,timestamp,caption,media_product_type`; match `shortcode` or `permalink` [V*][29] |
+| Instagram | `instagram.com/reel/{shortcode}`; shortcode is **not** the media id [I] | `GET /{ig-user-id}/media?fields=id,shortcode,permalink,timestamp,caption,media_product_type`; match `shortcode` or `permalink` (fields [V*][29]) |
 | Facebook | `facebook.com/reel/{video-id}` [I] | `GET /{page-id}/video_reels` returns `id`, `description`, `updated_time` (in the publishing guide; the edge reference page lists only POST) [V*][41] |
 
 Recommendation [I]: put a short unique token (e.g. `#h7k2q`) in every caption/description at publish time so the fallback match is exact rather than
@@ -294,46 +280,29 @@ forwards AI-label flags.
 
 ## 10. Sources (fetched 2026-10-01 unless noted)
 
-[1] https://developers.google.com/youtube/v3/docs/videos  
-[2] https://developers.google.com/youtube/analytics/revision_history (entries 2025-03-26 to 2026-09-13)  
-[3] https://developers.google.com/youtube/analytics/metrics · [4] https://developers.google.com/youtube/analytics/channel_reports  
-[5] https://developers.google.com/youtube/reporting/v1/reports and .../reports/channel_reports  
-[6] https://developers.google.com/youtube/analytics/dimensions · [7] https://developers.google.com/youtube/analytics/data_model  
-[8] https://developers.google.com/youtube/analytics/reference/reports/query · [9] https://developers.google.com/identity/protocols/oauth2  
-[10] https://support.google.com/youtube/answer/9527654 · [11] https://support.google.com/cloud/answer/13464323  
-[12] https://support.google.com/cloud/answer/15549945  
+[1] https://developers.google.com/youtube/v3/docs/videos · [2] https://developers.google.com/youtube/analytics/revision_history (entries 2025-03-26 to 2026-09-13) · [3] https://developers.google.com/youtube/analytics/metrics  
+[4] https://developers.google.com/youtube/analytics/channel_reports · [5] https://developers.google.com/youtube/reporting/v1/reports and .../reports/channel_reports · [6] https://developers.google.com/youtube/analytics/dimensions  
+[7] https://developers.google.com/youtube/analytics/data_model · [8] https://developers.google.com/youtube/analytics/reference/reports/query · [9] https://developers.google.com/identity/protocols/oauth2  
+[10] https://support.google.com/youtube/answer/9527654 · [11] https://support.google.com/cloud/answer/13464323 · [12] https://support.google.com/cloud/answer/15549945  
 [13] https://developers.google.com/youtube/v3/determine_quota_cost ; https://developers.google.com/youtube/v3/getting-started ; https://developers.google.com/youtube/v3/guides/quota_and_compliance_audits  
-[14] https://developers.tiktok.com/doc/tiktok-api-scopes  
-[15] https://developers.tiktok.com/doc/tiktok-api-v2-video-object ; .../tiktok-api-v2-video-list ; .../tiktok-api-v2-video-query (updated 2026-08)  
-[16] https://developers.tiktok.com/doc/tiktok-api-v2-get-user-info  
-[17] https://business-api.tiktok.com/portal/docs?id=1762228421622786 (Get post data of a TikTok account, v1.3)  
-[18] https://business-api.tiktok.com/portal/docs?id=1746624508278786 (Accounts Insights data latency)  
-[19] https://developers.tiktok.com/doc/oauth-user-access-token-management · [20] https://developers.tiktok.com/doc/add-a-sandbox  
-[21] https://developers.tiktok.com/doc/app-review-guidelines · [22] https://developers.tiktok.com/doc/tiktok-api-v2-rate-limit  
-[23] https://business-api.tiktok.com/portal/docs?id=1738855176671234 ; ...?id=1738855242728450 (register, create app)  
-[24] https://business-api.tiktok.com/portal/docs?id=1737944384433218 (Accounts API overview)  
-[25] https://business-api.tiktok.com/portal/docs?id=1833997638479041 ; ...?id=1738083939371009 (token, authorization)  
-[26] https://business-api.tiktok.com/portal/docs?id=1740029171730433 (rate limits)  
-[27] https://developers.facebook.com/docs/instagram-platform/reference/instagram-media/insights  
-[28] https://developers.facebook.com/docs/instagram-platform/changelog  
-[29] https://developers.facebook.com/docs/instagram-platform/reference/instagram-media  
-[30] https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login  
-[31] https://developers.facebook.com/docs/instagram-platform/overview · [32] https://developers.facebook.com/docs/permissions  
-[33] https://developers.facebook.com/docs/graph-api/overview/access-levels/  
-[34] https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/business-login  
-[35] https://developers.facebook.com/docs/graph-api/overview/rate-limiting/  
+[14] https://developers.tiktok.com/doc/tiktok-api-scopes · [15] https://developers.tiktok.com/doc/tiktok-api-v2-video-object ; .../tiktok-api-v2-video-list ; .../tiktok-api-v2-video-query (updated 2026-08)  
+[16] https://developers.tiktok.com/doc/tiktok-api-v2-get-user-info · [17] https://business-api.tiktok.com/portal/docs?id=1762228421622786 (Get post data of a TikTok account, v1.3)  
+[18] https://business-api.tiktok.com/portal/docs?id=1746624508278786 (Accounts Insights data latency) · [19] https://developers.tiktok.com/doc/oauth-user-access-token-management  
+[20] https://developers.tiktok.com/doc/add-a-sandbox · [21] https://developers.tiktok.com/doc/app-review-guidelines · [22] https://developers.tiktok.com/doc/tiktok-api-v2-rate-limit  
+[23] https://business-api.tiktok.com/portal/docs?id=1738855176671234 ; ...?id=1738855242728450 (register, create app) · [24] https://business-api.tiktok.com/portal/docs?id=1737944384433218 (Accounts API overview)  
+[25] https://business-api.tiktok.com/portal/docs?id=1833997638479041 ; ...?id=1738083939371009 (token, authorization) · [26] https://business-api.tiktok.com/portal/docs?id=1740029171730433 (rate limits)  
+[27] https://developers.facebook.com/docs/instagram-platform/reference/instagram-media/insights · [28] https://developers.facebook.com/docs/instagram-platform/changelog  
+[29] https://developers.facebook.com/docs/instagram-platform/reference/instagram-media · [30] https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login  
+[31] https://developers.facebook.com/docs/instagram-platform/overview · [32] https://developers.facebook.com/docs/permissions · [33] https://developers.facebook.com/docs/graph-api/overview/access-levels/  
+[34] https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/business-login · [35] https://developers.facebook.com/docs/graph-api/overview/rate-limiting/  
 [36] https://developers.facebook.com/docs/graph-api/reference/video/video_insights/ ; third-party definitions: https://help.funnel.io/en/articles/8769477-facebook-reels-dimensions-and-metrics  
 [37] https://developers.facebook.com/docs/graph-api/changelog/version25.0  
 [38] https://developers.facebook.com/docs/graph-api/reference/insights/ ; secondary: https://support.dataslayer.ai/understanding-upcoming-removal-of-metrics-on-facebook (2026-08-05)  
-[39] https://developers.facebook.com/docs/video-api/guides/insights/  
-[40] https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived  
+[39] https://developers.facebook.com/docs/video-api/guides/insights/ · [40] https://developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived  
 [41] https://developers.facebook.com/docs/video-api/guides/reels-publishing ; https://developers.facebook.com/docs/graph-api/reference/page/video_reels/  
-[42] https://developers.buffer.com/reference.md ; https://developers.buffer.com/guides/rest-migration.html ; https://developers.buffer.com/guides/post-metrics.md  
-[43] https://developers.buffer.com/guides/api-limits.md · [44] https://support.google.com/youtube/answer/14328491  
-[45] https://support.google.com/youtube/answer/1311392  
-[46] https://techcrunch.com/2026/07/20/youtube-clarifies-policies-around-ai-slop-and-upsetting-videos/ (secondary)  
-[47] https://support.google.com/youtube/answer/10774223  
-[48] https://www.tiktok.com/community-guidelines/en/youth-safety ; .../en/integrity-authenticity (2026 August version)  
+[42] https://developers.buffer.com/reference.md ; https://developers.buffer.com/guides/rest-migration.html ; https://developers.buffer.com/guides/post-metrics.md · [43] https://developers.buffer.com/guides/api-limits.md  
+[44] https://support.google.com/youtube/answer/14328491 · [45] https://support.google.com/youtube/answer/1311392 · [46] https://techcrunch.com/2026/07/20/youtube-clarifies-policies-around-ai-slop-and-upsetting-videos/ (secondary)  
+[47] https://support.google.com/youtube/answer/10774223 · [48] https://www.tiktok.com/community-guidelines/en/youth-safety ; .../en/integrity-authenticity (2026 August version)  
 [49] https://transparency.meta.com/policies/community-standards/misinformation (changelog to 2025-04-07; older)  
 [50] https://about.fb.com/news/2024/04/metas-approach-to-labeling-ai-generated-content-and-manipulated-media/ (2024; older)  
 [51] https://www.tubefilter.com/2025/07/15/ai-slop-unoriginal-repetitive-content-monetization-facebook-meta/ (2025; secondary, not opened: search summary only)  

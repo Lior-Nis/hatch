@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.budgets.governor import BudgetExceeded, BudgetGovernor
 from app.creative.candidates import ProductionDefaults, propose_mutation, propose_novel
+from app.evolution.anti_cloning import AntiCloningPolicy
 from app.experiments.models import Experiment
 from app.experiments.spec import OutputRequirements
 from app.ips.models import IP
@@ -67,6 +68,7 @@ def creative_handlers(
     governor: BudgetGovernor,
     output: OutputRequirements,
     production: ProductionDefaults,
+    policy: AntiCloningPolicy | None = None,
 ) -> dict[str, JobHandler]:
     def guarded(propose: JobHandler) -> JobHandler:
         def handle(session: Session, job: JobRun) -> JobResult:
@@ -86,13 +88,19 @@ def creative_handlers(
     def novel(session: Session, job: JobRun) -> JobResult:
         ip = session.get_one(IP, uuid.UUID(job.payload["ip_id"]))
         candidate = propose_novel(
-            session, ip, llm=llm, governor=governor, output=output, production=production
+            session,
+            ip,
+            llm=llm,
+            governor=governor,
+            output=output,
+            production=production,
+            policy=policy,
         )
         return _finish(session, job, candidate)
 
     def mutation(session: Session, job: JobRun) -> JobResult:
         parent = session.get_one(Experiment, uuid.UUID(job.payload["parent_experiment_id"]))
-        candidate = propose_mutation(session, parent, llm=llm, governor=governor)
+        candidate = propose_mutation(session, parent, llm=llm, governor=governor, policy=policy)
         return _finish(session, job, candidate)
 
     return {PROPOSE_NOVEL: guarded(novel), PROPOSE_MUTATION: guarded(mutation)}

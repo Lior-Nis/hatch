@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     llm_model: str = "claude-opus-5-5"
     llm_effort: Literal["low", "medium", "high", "xhigh", "max"] = "high"
 
+    # Anti-cloning: a candidate whose story is at least this similar (0–1) to
+    # an existing one in the same IP is rejected.
+    anti_cloning_max_similarity: float = 0.6
+
     # Name recorded on human review decisions. Defaults to the OS user.
     reviewer: str | None = None
 

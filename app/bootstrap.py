@@ -17,6 +17,7 @@ from app.config import Settings
 from app.creative.candidates import ProductionDefaults
 from app.creative.jobs import creative_handlers
 from app.db import make_engine, registry
+from app.evolution.anti_cloning import AntiCloningPolicy
 from app.experiments.spec import OutputRequirements
 from app.llm.ports import LanguageModel
 from app.production.jobs import PRODUCE_SHORT, produce_short_handler
@@ -150,5 +151,6 @@ def build_job_handlers(settings: Settings) -> dict[str, JobHandler]:
                 resolution=settings.default_resolution,
                 prompt_strategy=settings.default_prompt_strategy,
             ),
+            policy=AntiCloningPolicy(max_surface_similarity=settings.anti_cloning_max_similarity),
         )
     return handlers
