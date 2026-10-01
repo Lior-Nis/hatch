@@ -9,3 +9,4 @@ dist/
 *.egg-info/
 # Local runtime data (generated media, local object store)
 /var/
+.playwright-mcp/

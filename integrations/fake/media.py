@@ -31,7 +31,7 @@ def render_test_video(
     """Write a small synthetic H.264 MP4 (test pattern, optional sine tone)."""
     destination.parent.mkdir(parents=True, exist_ok=True)
     command = ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i",
-               f"testsrc2=size={width}x{height}:rate=24:duration={duration_seconds}"]  # fmt: skip
+               f"testsrc2=size={width}x{height}:rate=12:duration={duration_seconds}"]  # fmt: skip
     if with_audio:
         command += ["-f", "lavfi", "-i", f"sine=frequency=440:duration={duration_seconds}"]
     command += ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]

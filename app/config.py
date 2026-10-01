@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     generation_poll_interval_seconds: float = 5.0
     generation_timeout_seconds: float = 900.0
 
+    # Name recorded on human review decisions. Defaults to the OS user.
+    reviewer: str | None = None
+
     # Budget contract (USD). Defaults are the PRD's initial production limits.
     budget_target_per_video_usd: Decimal = Decimal("0.50")
     budget_max_per_video_usd: Decimal = Decimal("1.50")

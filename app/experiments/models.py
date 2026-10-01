@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from app.budgets.models import BudgetLedgerEntry
     from app.production.models import Asset, GenerationAttempt
     from app.publishing.models import Publication
-    from app.quality.models import QAResult
+    from app.quality.models import HumanReview, QAResult
 
 
 class Hypothesis(Identified, Base):
@@ -83,6 +83,9 @@ class Experiment(Identified, Base):
     )
     qa_results: Mapped[list["QAResult"]] = relationship(
         back_populates="experiment", order_by="QAResult.created_at"
+    )
+    human_reviews: Mapped[list["HumanReview"]] = relationship(
+        back_populates="experiment", order_by="HumanReview.created_at"
     )
     publications: Mapped[list["Publication"]] = relationship(
         back_populates="experiment", order_by="Publication.created_at"

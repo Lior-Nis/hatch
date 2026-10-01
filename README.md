@@ -18,6 +18,17 @@ project **Hatch**. Read the PRD item there before changing behaviour.
     make check       # lint + types + tests (tests use a separate hatch_test DB)
     uv run hatch info
 
+## Vertical slice
+
+    HATCH_MEDIA_PROVIDER=fake uv run hatch run-fixture   # free synthetic video
+    uv run hatch run-fixture                             # real Higgsfield generation (needs API keys)
+    uv run hatch lineage <experiment_id>                 # why the video exists and how it was made
+    uv run hatch serve                                   # human review UI at http://127.0.0.1:8321/review
+
+Every paid call is priced first and must pass the budget governor
+(per-generation, per-video, rolling 24h, rolling 30 days). A blocked attempt is
+recorded and no provider call is made.
+
 Copy `.env.example` to `.env` to override configuration locally. Every setting
 is an environment variable prefixed with `HATCH_`. Secrets go in `.env` (never
 committed) — never in Todoist, code, or logs.

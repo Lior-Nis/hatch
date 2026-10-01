@@ -1,6 +1,6 @@
 """Lineage view: one read that reconstructs why a video exists and how it was
 made — hypothesis → genome → generation attempts → final asset — together with
-its QA, publication, and cost records.
+its QA, human review, publication, and cost records.
 
 This is a read model over immutable evidence. It never writes.
 """
@@ -105,6 +105,15 @@ class QAResultView(_View):
     created_at: datetime
 
 
+class HumanReviewView(_View):
+    id: uuid.UUID
+    asset_id: uuid.UUID
+    decision: str
+    reason: str
+    reviewer: str
+    created_at: datetime
+
+
 class PublicationView(_View):
     id: uuid.UUID
     asset_id: uuid.UUID
@@ -145,6 +154,7 @@ class Lineage(_View):
     assets: list[AssetView]
     final_asset: AssetView | None
     qa_results: list[QAResultView]
+    human_reviews: list[HumanReviewView]
     publications: list[PublicationView]
     ledger: list[LedgerView]
     cost: CostSummary
@@ -161,6 +171,7 @@ def get_lineage(session: Session, experiment_id: uuid.UUID) -> Lineage:
             selectinload(Experiment.generation_attempts),
             selectinload(Experiment.assets),
             selectinload(Experiment.qa_results),
+            selectinload(Experiment.human_reviews),
             selectinload(Experiment.publications),
             selectinload(Experiment.ledger_entries),
         )
@@ -199,6 +210,7 @@ def get_lineage(session: Session, experiment_id: uuid.UUID) -> Lineage:
         assets=assets,
         final_asset=final_assets[-1] if final_assets else None,
         qa_results=[QAResultView.model_validate(result) for result in experiment.qa_results],
+        human_reviews=[HumanReviewView.model_validate(r) for r in experiment.human_reviews],
         publications=[PublicationView.model_validate(p) for p in experiment.publications],
         ledger=[LedgerView.model_validate(entry) for entry in experiment.ledger_entries],
         cost=CostSummary(attempts=len(experiment.generation_attempts), committed_usd=committed),

@@ -1,6 +1,7 @@
 import uuid
+from enum import StrEnum
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base, Identified, JSONDict, enum_column
@@ -25,4 +26,25 @@ class QAResult(Identified, Base):
     details: Mapped[JSONDict] = mapped_column(default=dict)
 
     experiment: Mapped[Experiment] = relationship(back_populates="qa_results")
+    asset: Mapped[Asset] = relationship()
+
+
+class ReviewDecision(StrEnum):
+    APPROVE = "approve"
+    REJECT = "reject"
+
+
+class HumanReview(Identified, Base):
+    """A human reviewer's decision on one asset. Append-only: a decision is
+    never edited, so reviews double as labelled QA data."""
+
+    __tablename__ = "human_reviews"
+
+    experiment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("experiments.id"), index=True)
+    asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id"))
+    decision: Mapped[ReviewDecision] = mapped_column(enum_column(ReviewDecision))
+    reason: Mapped[str] = mapped_column(Text)
+    reviewer: Mapped[str] = mapped_column(String(120))
+
+    experiment: Mapped[Experiment] = relationship(back_populates="human_reviews")
     asset: Mapped[Asset] = relationship()

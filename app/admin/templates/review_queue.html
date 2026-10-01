@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Human review · Hatch{% endblock %}
+{% block content %}
+<h1>Human review</h1>
+
+<h2>Awaiting a decision ({{ pending | length }})</h2>
+{% if pending %}
+<table>
+  <tr><th>IP</th><th>Hypothesis</th><th>Created</th><th></th></tr>
+  {% for experiment in pending %}
+  <tr>
+    <td>{{ experiment.ip.name }}</td>
+    <td>{{ experiment.hypothesis.statement }}</td>
+    <td class="muted">{{ experiment.created_at.strftime("%Y-%m-%d %H:%M") }} UTC</td>
+    <td><a href="/review/{{ experiment.id }}">Review</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">Nothing is waiting for review.</p>
+{% endif %}
+
+<h2>Recent decisions</h2>
+{% if recent %}
+<table>
+  <tr><th>Decision</th><th>Reason</th><th>Reviewer</th><th>When</th><th></th></tr>
+  {% for review in recent %}
+  <tr>
+    <td><span class="tag {{ review.decision.value }}">{{ review.decision.value }}</span></td>
+    <td>{{ review.reason or "—" }}</td>
+    <td>{{ review.reviewer }}</td>
+    <td class="muted">{{ review.created_at.strftime("%Y-%m-%d %H:%M") }} UTC</td>
+    <td><a href="/review/{{ review.experiment_id }}">Open</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No decisions yet.</p>
+{% endif %}
+{% endblock %}

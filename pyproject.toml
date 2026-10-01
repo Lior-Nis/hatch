@@ -6,12 +6,16 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.14",
+    "fastapi>=0.115",
     "httpx>=0.28",
+    "jinja2>=3.1",
     "psycopg[binary]>=3.2",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
+    "python-multipart>=0.0.18",
     "sqlalchemy>=2.0.36",
     "typer>=0.15",
+    "uvicorn>=0.32",
 ]
 
 [project.scripts]
@@ -19,6 +23,7 @@ hatch = "app.cli:app"
 
 [dependency-groups]
 dev = [
+    "httpx2>=2.13.1",
     "mypy>=1.13",
     "pytest>=8.3",
     "ruff>=0.8",

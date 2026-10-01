@@ -78,6 +78,16 @@ def lineage(experiment_id: uuid.UUID) -> None:
         typer.echo(report.model_dump_json(indent=2))
 
 
+@app.command()
+def serve(host: str = "127.0.0.1", port: int = 8321) -> None:
+    """Run the operator web UI (human review). Local-only: it has no login."""
+    import uvicorn
+
+    from app.admin.web import create_app
+
+    uvicorn.run(create_app(), host=host, port=port)
+
+
 def _production_deps(settings: Settings) -> ProductionDeps:
     try:
         return build_production_deps(settings)
