@@ -55,7 +55,7 @@ from tests.factories import LIMITS
 from tests.publishing.test_service import CHANNELS, map_all
 
 START = datetime(2026, 10, 1, 8, 0, tzinfo=UTC)
-STRONG = {
+STRONG: dict[str, Any] = {
     "views": 4000, "average_watch_fraction": 0.92, "completion_rate": 0.6,
     "likes": 260, "shares": 40, "saves": 45, "comments": 12, "follows": 30,
 }  # fmt: skip
