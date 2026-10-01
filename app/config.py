@@ -64,6 +64,16 @@ class Settings(BaseSettings):
     # PRD cadence of two videos per IP per day.
     publish_slots_utc: str = "15:00,21:00"
 
+    # Platform analytics (official APIs). OAuth tokens obtained with
+    # `hatch auth …` are kept in credentials_file, never in the database.
+    credentials_file: Path = Path("var/credentials.json")
+    youtube_client_id: str | None = None
+    youtube_client_secret: SecretStr | None = None
+    tiktok_client_key: str | None = None
+    tiktok_client_secret: SecretStr | None = None
+    meta_app_id: str | None = None
+    meta_app_secret: SecretStr | None = None
+
     # Language model for creative agents and content QA (Claude API).
     anthropic_api_key: SecretStr | None = None
     llm_model: str = "claude-opus-5-5"

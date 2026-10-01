@@ -40,10 +40,14 @@ from app.scheduling.worker import JobHandler
 from app.storage import AssetStore
 from integrations.anthropic.language_model import AnthropicLanguageModel
 from integrations.buffer.publisher import BufferPublisher
+from integrations.credentials import TokenStore
 from integrations.fake.media import FakeMediaGenerator
 from integrations.higgsfield.generator import HiggsfieldMediaGenerator
+from integrations.meta.analytics import FacebookReelsAnalytics, InstagramReelsAnalytics
 from integrations.object_storage.local import LocalAssetStore
 from integrations.object_storage.s3 import S3AssetStore
+from integrations.tiktok.analytics import TikTokBusinessAnalytics, TikTokDisplayAnalytics
+from integrations.youtube.analytics import YouTubeAnalytics
 
 assert registry  # every ORM model must be registered before any session is used
 
@@ -129,7 +133,33 @@ def build_analytics_adapters(settings: Settings) -> dict[Platform, AnalyticsAdap
     """One official-API adapter per platform that has credentials configured.
     A platform without an adapter records an explicit ingestion failure for
     each observation rather than being silently skipped."""
-    return {}
+    tokens = build_token_store(settings)
+    stored = tokens.keys()
+    adapters: dict[Platform, AnalyticsAdapter] = {}
+    if settings.youtube_client_id and settings.youtube_client_secret:
+        adapters[Platform.YOUTUBE_SHORTS] = YouTubeAnalytics(
+            client_id=settings.youtube_client_id,
+            client_secret=settings.youtube_client_secret.get_secret_value(),
+            tokens=tokens,
+        )
+    if any(key.startswith("tiktok_business:") for key in stored):
+        # The Business API is the only source of TikTok watch-quality signals.
+        adapters[Platform.TIKTOK] = TikTokBusinessAnalytics(tokens=tokens)
+    elif settings.tiktok_client_key and settings.tiktok_client_secret:
+        adapters[Platform.TIKTOK] = TikTokDisplayAnalytics(
+            client_key=settings.tiktok_client_key,
+            client_secret=settings.tiktok_client_secret.get_secret_value(),
+            tokens=tokens,
+        )
+    if any(key.startswith("instagram:") for key in stored):
+        adapters[Platform.INSTAGRAM_REELS] = InstagramReelsAnalytics(tokens=tokens)
+    if any(key.startswith("facebook:") for key in stored):
+        adapters[Platform.FACEBOOK_REELS] = FacebookReelsAnalytics(tokens=tokens)
+    return adapters
+
+
+def build_token_store(settings: Settings) -> TokenStore:
+    return TokenStore(settings.credentials_file)
 
 
 def build_language_model(settings: Settings) -> LanguageModel:

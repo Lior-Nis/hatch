@@ -1,11 +1,14 @@
 """Hatch command-line interface."""
 
 import os
+import secrets
 import socket
 import uuid
 from dataclasses import replace
 from datetime import timedelta
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Annotated, NoReturn
+from urllib.parse import parse_qs, urlparse
 
 import typer
 from sqlalchemy import select
@@ -13,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import __version__
+from app.analytics.ports import AnalyticsError
 from app.bootstrap import (
     ConfigurationError,
     build_asset_store,
@@ -21,6 +25,7 @@ from app.bootstrap import (
     build_production_deps,
     build_publisher,
     build_qa_gates,
+    build_token_store,
     open_session,
 )
 from app.budgets.reports import spend_report
@@ -49,6 +54,9 @@ from app.publishing.service import map_account
 from app.quality.runner import run_quality_gates
 from app.scheduling.models import JobRun, JobStatus
 from app.scheduling.worker import Worker
+from integrations.meta.auth import store_page_tokens
+from integrations.tiktok.auth import exchange_tiktok_code, tiktok_authorize_url
+from integrations.youtube.auth import exchange_youtube_code, youtube_authorize_url
 
 app = typer.Typer(help="Hatch — evolutionary kids' media studio.", no_args_is_help=True)
 
@@ -328,6 +336,108 @@ def accounts_list() -> None:
             missing = [p.value for p in Platform if p not in accounts]
             if missing:
                 typer.echo(f"  missing: {', '.join(missing)}")
+
+
+auth_app = typer.Typer(help="One-time authorisation of your own accounts for analytics.")
+app.add_typer(auth_app, name="auth")
+
+
+@auth_app.command("youtube")
+def auth_youtube(port: Annotated[int, typer.Option(help="Local callback port.")] = 8765) -> None:
+    """Authorise read-only analytics for one YouTube channel you own."""
+    settings = get_settings()
+    if not settings.youtube_client_id or not settings.youtube_client_secret:
+        _fail("set HATCH_YOUTUBE_CLIENT_ID and HATCH_YOUTUBE_CLIENT_SECRET in .env first")
+    redirect_uri = f"http://127.0.0.1:{port}"
+    state = secrets.token_urlsafe(16)
+    typer.echo("Open this URL, choose the channel, and approve:")
+    typer.echo(youtube_authorize_url(settings.youtube_client_id, redirect_uri, state=state))
+    code = _wait_for_oauth_code(port, state)
+    try:
+        channel_id, title = exchange_youtube_code(
+            code,
+            client_id=settings.youtube_client_id,
+            client_secret=settings.youtube_client_secret.get_secret_value(),
+            redirect_uri=redirect_uri,
+            tokens=build_token_store(settings),
+        )
+    except AnalyticsError as exc:
+        _fail(str(exc))
+    typer.echo(f"authorised channel {channel_id} ({title})")
+    typer.echo(f"use --external-account-id {channel_id} when mapping it to an IP")
+
+
+@auth_app.command("tiktok")
+def auth_tiktok(
+    redirect_uri: Annotated[str, typer.Option(help="A redirect URI registered on your app.")],
+) -> None:
+    """Authorise the Display API for one TikTok account you own."""
+    settings = get_settings()
+    if not settings.tiktok_client_key or not settings.tiktok_client_secret:
+        _fail("set HATCH_TIKTOK_CLIENT_KEY and HATCH_TIKTOK_CLIENT_SECRET in .env first")
+    typer.echo("Open this URL while logged in to the TikTok account, and approve:")
+    typer.echo(tiktok_authorize_url(settings.tiktok_client_key, redirect_uri, state="hatch"))
+    code = typer.prompt("Paste the `code` value from the page you were redirected to")
+    try:
+        open_id = exchange_tiktok_code(
+            code,
+            client_key=settings.tiktok_client_key,
+            client_secret=settings.tiktok_client_secret.get_secret_value(),
+            redirect_uri=redirect_uri,
+            tokens=build_token_store(settings),
+        )
+    except AnalyticsError as exc:
+        _fail(str(exc))
+    typer.echo(f"authorised TikTok account; use --external-account-id {open_id} when mapping it")
+
+
+@auth_app.command("meta")
+def auth_meta() -> None:
+    """Store Page tokens for your Facebook Pages and their Instagram accounts."""
+    settings = get_settings()
+    if not settings.meta_app_id or not settings.meta_app_secret:
+        _fail("set HATCH_META_APP_ID and HATCH_META_APP_SECRET in .env first")
+    typer.echo(
+        "In the Graph API Explorer, generate a user token for your app with pages_show_list, "
+        "pages_read_engagement, read_insights, instagram_basic and instagram_manage_insights."
+    )
+    user_token = typer.prompt("Paste that user token (input hidden)", hide_input=True)
+    try:
+        pages = store_page_tokens(
+            user_token,
+            app_id=settings.meta_app_id,
+            app_secret=settings.meta_app_secret.get_secret_value(),
+            tokens=build_token_store(settings),
+        )
+    except AnalyticsError as exc:
+        _fail(str(exc))
+    for page_id, name, instagram_id in pages:
+        typer.echo(f"Facebook Page {name}: --external-account-id {page_id}")
+        if instagram_id:
+            typer.echo(f"  linked Instagram account: --external-account-id {instagram_id}")
+
+
+def _wait_for_oauth_code(port: int, state: str) -> str:
+    """Serve one request on localhost and return the OAuth ``code`` from it."""
+    received: dict[str, str] = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            query = parse_qs(urlparse(self.path).query)
+            received.update({key: values[0] for key, values in query.items()})
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"Hatch has what it needs. You can close this tab.")
+
+        def log_message(self, *args: object) -> None:  # keep the terminal quiet
+            pass
+
+    with HTTPServer(("127.0.0.1", port), Handler) as server:
+        while "code" not in received and "error" not in received:
+            server.handle_request()
+    if received.get("state") != state or "code" not in received:
+        _fail(f"authorisation failed: {received.get('error', 'state mismatch')}")
+    return received["code"]
 
 
 @app.command("publish-ready")

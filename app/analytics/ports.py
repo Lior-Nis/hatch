@@ -6,9 +6,9 @@ distinguishable and normalization can be re-derived later from the raw data.
 """
 
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import BaseModel, ConfigDict
 
 from app.platforms import Platform
 
@@ -45,7 +45,7 @@ class MetricObservation(BaseModel):
     platform: Platform
     platform_post_id: str
     observed_at: datetime
-    raw: dict[str, JsonValue]
+    raw: dict[str, Any]
     normalized: NormalizedMetrics
 
 
