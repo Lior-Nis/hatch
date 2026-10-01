@@ -21,7 +21,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.budgets.models import BudgetLedgerEntry, LedgerStatus
+from app.budgets.models import BudgetLedgerEntry, LedgerStatus, committed_usd, is_spend
 from app.config import Settings
 from app.db import utcnow
 
@@ -143,13 +143,8 @@ class BudgetGovernor:
         return self._committed(session, BudgetLedgerEntry.created_at > since)
 
     def _committed(self, session: Session, condition: ColumnElement[bool]) -> Decimal:
-        amount = func.coalesce(
-            BudgetLedgerEntry.actual_cost_usd, BudgetLedgerEntry.estimated_cost_usd
-        )
         total = session.scalar(
-            select(func.coalesce(func.sum(amount), 0)).where(
-                BudgetLedgerEntry.status != LedgerStatus.BLOCKED, condition
-            )
+            select(func.coalesce(func.sum(committed_usd()), 0)).where(is_spend(), condition)
         )
         return Decimal(total or 0)
 

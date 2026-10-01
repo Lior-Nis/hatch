@@ -5,6 +5,7 @@ The only place that knows which vendor implements which port.
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
@@ -44,7 +45,8 @@ def build_asset_store(settings: Settings) -> AssetStore:
 
 def build_media_generator(settings: Settings) -> MediaGenerator:
     if settings.media_provider == "fake":
-        return FakeMediaGenerator()
+        # Synthetic media is free, so it must not eat into the real budget.
+        return FakeMediaGenerator(cost_per_second_usd=Decimal("0"))
     if settings.higgsfield_api_key is None or settings.higgsfield_api_secret is None:
         raise ConfigurationError(
             "Higgsfield credentials are missing: set HATCH_HIGGSFIELD_API_KEY and "

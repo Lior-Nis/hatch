@@ -2,6 +2,7 @@
 
 import uuid
 from dataclasses import replace
+from datetime import timedelta
 from typing import NoReturn
 
 import typer
@@ -15,7 +16,9 @@ from app.bootstrap import (
     build_qa_gates,
     open_session,
 )
+from app.budgets.reports import spend_report
 from app.config import Settings, get_settings
+from app.db import utcnow
 from app.experiments.fixtures import FIRST_SHORT
 from app.experiments.lineage import ExperimentNotFound, get_lineage
 from app.experiments.models import Experiment
@@ -80,6 +83,14 @@ def lineage(experiment_id: uuid.UUID) -> None:
         except ExperimentNotFound:
             _fail(f"no experiment with id {experiment_id}")
         typer.echo(report.model_dump_json(indent=2))
+
+
+@app.command()
+def costs(days: int = typer.Option(30, help="Report window in days.")) -> None:
+    """Print, as JSON, spend by video, IP, provider and day."""
+    since = utcnow() - timedelta(days=days)
+    with open_session(get_settings()) as session:
+        typer.echo(spend_report(session, since=since).model_dump_json(indent=2))
 
 
 @app.command()

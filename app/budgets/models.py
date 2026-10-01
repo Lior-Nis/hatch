@@ -1,8 +1,9 @@
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ColumnElement, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base, Evidence, Identified, JSONDict, Money, enum_column
@@ -46,3 +47,14 @@ class BudgetLedgerEntry(Evidence, Identified, Base):
 
     experiment: Mapped[Experiment | None] = relationship(back_populates="ledger_entries")
     generation_attempt: Mapped[GenerationAttempt | None] = relationship()
+
+
+def committed_usd() -> ColumnElement[Decimal]:
+    """SQL expression for what a ledger row counts as spend: the actual cost
+    when the provider reported one, otherwise the estimate. Combine with
+    ``is_spend()`` so blocked attempts are excluded."""
+    return func.coalesce(BudgetLedgerEntry.actual_cost_usd, BudgetLedgerEntry.estimated_cost_usd)
+
+
+def is_spend() -> ColumnElement[bool]:
+    return BudgetLedgerEntry.status != LedgerStatus.BLOCKED

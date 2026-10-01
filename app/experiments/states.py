@@ -42,6 +42,16 @@ class VideoStatus(StrEnum):
     ABORTED_BUDGET = "aborted_budget"
 
 
+PUBLISHED_VIDEO_STATES = frozenset(
+    {VideoStatus.PUBLISHED, VideoStatus.OBSERVING, VideoStatus.EVALUATED}
+)
+ACCEPTED_VIDEO_STATES = PUBLISHED_VIDEO_STATES | {
+    VideoStatus.READY,
+    VideoStatus.SCHEDULED,
+    VideoStatus.PUBLISH_FAILED,
+}
+"""Videos that passed automated QA and (in Stage A/B) human approval."""
+
 _E = ExperimentStatus
 EXPERIMENT_LIFECYCLE = Lifecycle(
     "experiment",

@@ -4,12 +4,14 @@ import uuid
 from decimal import Decimal
 from pathlib import Path
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.budgets.governor import BudgetGovernor, BudgetLimits
 from app.experiments.fixtures import FIRST_SHORT
 from app.experiments.models import Experiment
 from app.experiments.service import create_experiment
+from app.experiments.states import VideoStatus
 from app.production.run import ProductionDeps, produce_short
 from app.quality.runner import run_quality_gates
 from app.quality.technical import TechnicalQAGate
@@ -25,8 +27,22 @@ LIMITS = BudgetLimits(
 )
 
 
-def make_experiment(session: Session, *, lineage_id: uuid.UUID | None = None) -> Experiment:
-    return create_experiment(session, FIRST_SHORT, lineage_id=lineage_id)
+def make_experiment(
+    session: Session, *, lineage_id: uuid.UUID | None = None, ip_slug: str | None = None
+) -> Experiment:
+    spec = FIRST_SHORT
+    if ip_slug is not None:
+        ip = spec.ip.model_copy(update={"slug": ip_slug, "name": ip_slug.title()})
+        spec = spec.model_copy(update={"ip": ip})
+    return create_experiment(session, spec, lineage_id=lineage_id)
+
+
+def force_video_status(session: Session, experiment: Experiment, status: VideoStatus) -> None:
+    """Test setup only: put a video in a state without walking the lifecycle."""
+    session.execute(
+        update(Experiment).where(Experiment.id == experiment.id).values(video_status=status)
+    )
+    session.expire(experiment)
 
 
 def make_generated_experiment(
