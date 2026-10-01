@@ -60,6 +60,8 @@ class Experiment(Identified, Base):
     """Shared by an experiment and all its descendants; fresh for novel ones."""
     generation_reason: Mapped[str] = mapped_column(Text)
     """Why this candidate exists, in words an operator can audit."""
+    output_requirements: Mapped[JSONDict]
+    """What the produced video must satisfy (see ``OutputRequirements``)."""
     status: Mapped[ExperimentStatus] = mapped_column(
         enum_column(ExperimentStatus), default=ExperimentStatus.HYPOTHESIS_CREATED
     )

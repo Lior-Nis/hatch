@@ -40,7 +40,11 @@ def test_a_complete_experiment_can_be_persisted_and_reloaded(session: Session) -
         creative_spec="Pip wonders where rainbows come from.",
     )
     experiment = Experiment(
-        ip=ip, hypothesis=hypothesis, genome=genome, generation_reason="vertical-slice fixture"
+        ip=ip,
+        hypothesis=hypothesis,
+        genome=genome,
+        generation_reason="vertical-slice fixture",
+        output_requirements={"aspect_ratio": "9:16"},
     )
     attempt = GenerationAttempt(
         experiment=experiment,
