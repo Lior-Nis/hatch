@@ -43,6 +43,7 @@ from app.experiments.service import create_experiment
 from app.experiments.states import VideoStatus
 from app.ips.catalog import INITIAL_IPS, seed_initial_ips
 from app.ips.models import IP
+from app.knowledge.models import KnowledgeSummary
 from app.observability.health import find_stalls, provider_health
 from app.observability.logging import configure_logging
 from app.observability.trace import experiment_timeline, render_timeline
@@ -207,6 +208,22 @@ def evolve(
                 f"{report.replication_requests} replication request(s), "
                 f"{report.lifecycle_transitions} lifecycle change(s), {report.planned} planned "
                 f"({report.in_pipeline} already in the pipeline)"
+            )
+
+
+@app.command()
+def knowledge(
+    ip_slug: Annotated[str | None, typer.Argument(help="One IP; all IPs when omitted.")] = None,
+) -> None:
+    """What Hatch currently believes, with how many experiments back each claim."""
+    with open_session(get_settings()) as session:
+        query = select(KnowledgeSummary).order_by(KnowledgeSummary.confidence.desc())
+        if ip_slug is not None:
+            query = query.join(IP, IP.id == KnowledgeSummary.ip_id).where(IP.slug == ip_slug)
+        for summary in session.scalars(query):
+            typer.echo(
+                f"[{summary.confidence:.2f}] {summary.statement} "
+                f"({len(summary.supporting_experiments)} experiment(s), v{summary.version})"
             )
 
 

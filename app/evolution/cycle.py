@@ -25,6 +25,7 @@ from app.evolution.replication import (
 from app.experiments.models import Experiment
 from app.experiments.states import ExperimentConclusion, ExperimentStatus, VideoStatus
 from app.ips.models import IP
+from app.knowledge.synthesis import synthesize_ip_knowledge
 from app.scheduling.models import JobRun, JobStatus
 
 # A video in one of these states is on its way to being published.
@@ -56,6 +57,7 @@ class EvolutionReport:
     lifecycle_transitions: int
     planned: int
     in_pipeline: int
+    knowledge_updates: int = 0
 
 
 def _has_live_job(session: Session, experiment: Experiment) -> bool:
@@ -206,7 +208,9 @@ def evolve_ip(
         if review_ip_lifecycle(session, ip, policy) is None:
             break
         transitions += 1
-    # 5. Top the production pipeline up to its target.
+    # 5. Refresh what the creative agent will read: derived knowledge.
+    knowledge = synthesize_ip_knowledge(session, ip, policy)
+    # 6. Top the production pipeline up to its target.
     in_pipeline = pipeline_size(session, ip)
     planned = plan_next_experiments(
         session, ip, policy, slots=max(0, pipeline_target - in_pipeline), now=now
@@ -218,4 +222,5 @@ def evolve_ip(
         lifecycle_transitions=transitions,
         planned=len(planned),
         in_pipeline=in_pipeline,
+        knowledge_updates=len(knowledge),
     )
