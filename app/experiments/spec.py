@@ -37,6 +37,19 @@ class OutputRequirements(BaseModel):
     audio_expected: bool = True
 
 
+def check_genome_fits_output(genome: Genome, output: OutputRequirements) -> None:
+    """Raise ``ValueError`` if the genome asks for a video the output
+    requirements would reject."""
+    duration = genome.genes.duration_seconds
+    if not output.min_duration_seconds <= duration <= output.max_duration_seconds:
+        raise ValueError(
+            f"genome duration {duration}s is outside the output requirements "
+            f"[{output.min_duration_seconds}, {output.max_duration_seconds}]"
+        )
+    if genome.genes.aspect_ratio != output.aspect_ratio:
+        raise ValueError("genome aspect_ratio does not match the output requirements")
+
+
 class ExperimentSpec(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -48,12 +61,5 @@ class ExperimentSpec(BaseModel):
 
     @model_validator(mode="after")
     def _genome_fits_output_requirements(self) -> Self:
-        duration = self.genome.genes.duration_seconds
-        if not self.output.min_duration_seconds <= duration <= self.output.max_duration_seconds:
-            raise ValueError(
-                f"genome duration {duration}s is outside the output requirements "
-                f"[{self.output.min_duration_seconds}, {self.output.max_duration_seconds}]"
-            )
-        if self.genome.genes.aspect_ratio != self.output.aspect_ratio:
-            raise ValueError("genome aspect_ratio does not match the output requirements")
+        check_genome_fits_output(self.genome, self.output)
         return self
