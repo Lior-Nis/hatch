@@ -10,54 +10,12 @@ $0.50 target). 720p would be $0.80 (see docs/research/higgsfield-api.md).
 """
 
 from app.creative.genome import Genes, Genome
-from app.creative.hypotheses import Metric, Prediction
-from app.experiments.spec import ExperimentSpec, HypothesisSpec, IPSpec, OutputRequirements
+from app.experiments.spec import ExperimentSpec, OutputRequirements
+from app.ips.catalog import NIBBIN_HOLLOW
 
 FIRST_SHORT = ExperimentSpec(
-    ip=IPSpec(
-        slug="nibbin-hollow",
-        name="Nibbin Hollow",
-        category="narrative_adventure",
-        spec={
-            "age_range": [4, 8],
-            "premise": (
-                "Nib, a small round hedgehog-like creature in a leaf cape, explores a mossy "
-                "forest hollow and solves tiny, gentle mysteries with patience and curiosity."
-            ),
-            "world_rules": [
-                "The hollow is always safe: no villains, no chases, no peril.",
-                "Every mystery has a kind, natural explanation.",
-                "Nib never speaks; feelings show through gesture and soft sounds.",
-            ],
-            "visual_identity": (
-                "Soft 3D storybook look, warm rim light, rounded shapes, moss greens and "
-                "amber glows, shallow depth of field."
-            ),
-            "safety_constraints": [
-                "No scary imagery, darkness is cosy not threatening.",
-                "No dangerous behaviour a child could imitate.",
-                "No text, logos, brands, or resemblance to existing characters.",
-            ],
-        },
-    ),
-    hypothesis=HypothesisSpec(
-        statement=(
-            "Opening on an unexplained gentle glow (a visual question) in the first two "
-            "seconds raises completion rate versus a plain establishing shot."
-        ),
-        rationale=(
-            "A curiosity gap gives a 4–8-year-old a reason to stay for the reveal; the "
-            "reveal lands inside the same short so the question is always answered."
-        ),
-        prediction=Prediction(
-            metric=Metric.COMPLETION_RATE,
-            direction="increase",
-            compared_to="ip_baseline",
-            minimum_relative_effect=0.1,
-            genes_under_test=("hook_type",),
-        ),
-        source="fixture",
-    ),
+    ip=NIBBIN_HOLLOW.ip,
+    hypothesis=NIBBIN_HOLLOW.initial_hypotheses[0].model_copy(update={"source": "fixture"}),
     genome=Genome(
         genes=Genes(
             primary_character="Nib",

@@ -28,6 +28,7 @@ from app.experiments.lineage import ExperimentNotFound, get_lineage
 from app.experiments.models import Experiment
 from app.experiments.service import create_experiment
 from app.experiments.states import VideoStatus
+from app.ips.catalog import INITIAL_IPS, seed_initial_ips
 from app.observability.health import find_stalls, provider_health
 from app.observability.logging import configure_logging
 from app.observability.trace import experiment_timeline, render_timeline
@@ -61,6 +62,16 @@ def info() -> None:
     typer.echo(f"  max per video: ${settings.budget_max_per_video_usd:.2f}")
     typer.echo(f"  daily ceiling: ${settings.budget_daily_usd:.2f}")
     typer.echo(f"  monthly ceiling: ${settings.budget_monthly_usd:.2f}")
+
+
+@app.command("seed-ips")
+def seed_ips() -> None:
+    """Create the three initial IPs with their characters and starting hypotheses."""
+    with open_session(get_settings()) as session:
+        seed_initial_ips(session)
+        session.commit()
+        for definition in INITIAL_IPS:
+            typer.echo(f"{definition.ip.slug}: {definition.ip.name} ({definition.ip.category})")
 
 
 @app.command("run-fixture")

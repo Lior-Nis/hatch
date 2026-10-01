@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from app.creative.genome import Genome
 from app.creative.hypotheses import Prediction
+from app.ips.profile import IPProfile
 
 
 class IPSpec(BaseModel):
@@ -15,6 +16,12 @@ class IPSpec(BaseModel):
     name: str
     category: str
     spec: dict[str, JsonValue]
+    """An ``IPProfile`` as JSON."""
+
+    @model_validator(mode="after")
+    def _spec_is_a_profile(self) -> Self:
+        IPProfile.model_validate(self.spec)
+        return self
 
 
 class HypothesisSpec(BaseModel):

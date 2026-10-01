@@ -16,6 +16,10 @@ def _words(token: str) -> str:
 def build_video_prompt(*, ip_spec: dict[str, Any], genes: Genes, creative_spec: str) -> str:
     """Prompt strategy ``single_shot_v1``: one continuous shot, whole story."""
     lines = [creative_spec.strip(), ""]
+    cast = {genes.primary_character, *genes.supporting_characters}
+    for character in ip_spec.get("characters") or []:
+        if character.get("name") in cast and character.get("appearance"):
+            lines.append(f"Character: {character['appearance']}")
     if visual_identity := ip_spec.get("visual_identity"):
         lines.append(f"Visual identity: {visual_identity}")
     lines.append(
