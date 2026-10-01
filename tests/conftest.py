@@ -9,7 +9,9 @@ from sqlalchemy import Connection, Engine, create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
-from app.db import alembic_config
+from app.db import Base, alembic_config, registry
+
+assert registry
 
 TEST_DATABASE_URL = os.environ.get(
     "HATCH_TEST_DATABASE_URL", "postgresql+psycopg://hatch:hatch@localhost:54329/hatch_test"
@@ -54,3 +56,13 @@ def session(connection: Connection) -> Iterator[Session]:
     """A session whose work is rolled back after each test."""
     with Session(bind=connection, join_transaction_mode="create_savepoint") as session:
         yield session
+
+
+@pytest.fixture
+def committed_db(engine: Engine) -> Iterator[Engine]:
+    """For tests that need real commits (several connections, CLI processes):
+    yields the engine and empties every table afterwards."""
+    yield engine
+    tables = ", ".join(f'"{table.name}"' for table in Base.metadata.sorted_tables)
+    with engine.begin() as connection:
+        connection.execute(text(f"TRUNCATE {tables} CASCADE"))

@@ -5,6 +5,7 @@ The only place that knows which vendor implements which port.
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import timedelta
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -12,10 +13,13 @@ from sqlalchemy.orm import Session
 from app.budgets.governor import BudgetGovernor, BudgetLimits
 from app.config import Settings
 from app.db import make_engine, registry
+from app.production.jobs import PRODUCE_SHORT, produce_short_handler
 from app.production.ports import MediaGenerator
 from app.production.run import ProductionDeps
+from app.quality.jobs import RUN_QA, run_qa_handler
 from app.quality.ports import QAGate
 from app.quality.technical import TechnicalQAGate
+from app.scheduling.worker import JobHandler
 from app.storage import AssetStore
 from integrations.fake.media import FakeMediaGenerator
 from integrations.higgsfield.generator import HiggsfieldMediaGenerator
@@ -71,3 +75,14 @@ def build_production_deps(settings: Settings) -> ProductionDeps:
         poll_interval_seconds=settings.generation_poll_interval_seconds,
         timeout_seconds=settings.generation_timeout_seconds,
     )
+
+
+def build_job_handlers(settings: Settings) -> dict[str, JobHandler]:
+    """Every background job type the worker can run."""
+    deps = build_production_deps(settings)
+    return {
+        PRODUCE_SHORT: produce_short_handler(
+            deps, poll_interval=timedelta(seconds=settings.generation_poll_interval_seconds)
+        ),
+        RUN_QA: run_qa_handler(gates=build_qa_gates(settings), store=deps.store),
+    }

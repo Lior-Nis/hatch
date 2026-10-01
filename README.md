@@ -24,6 +24,13 @@ project **Hatch**. Read the PRD item there before changing behaviour.
     uv run hatch run-fixture                             # real Higgsfield generation (needs API keys)
     uv run hatch lineage <experiment_id>                 # why the video exists and how it was made
     uv run hatch serve                                   # human review UI at http://127.0.0.1:8321/review
+    uv run hatch costs                                   # spend by video, IP, provider, day
+
+Background mode (durable queue in Postgres; survives restarts):
+
+    uv run hatch run-fixture --background                # queue the production
+    uv run hatch worker                                  # run queued jobs (generation → QA)
+    uv run hatch jobs                                    # status, attempts, timing per job
 
 Every paid call is priced first and must pass the budget governor
 (per-generation, per-video, rolling 24h, rolling 30 days). A blocked attempt is

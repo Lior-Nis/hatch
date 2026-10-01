@@ -5,13 +5,12 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine, select, text
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 from typer.testing import CliRunner
 
 from app.cli import app
 from app.config import get_settings
-from app.db import Base
 from app.experiments.models import Experiment
 from app.experiments.states import VideoStatus
 from app.production.probe import probe_media
@@ -21,18 +20,16 @@ runner = CliRunner()
 
 
 @pytest.fixture
-def cli_env(engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    """Point the CLI at the test database and a temp asset dir. The CLI commits
-    for real, so every table is emptied afterwards."""
+def cli_env(
+    committed_db: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[Path]:
+    """Point the CLI at the test database and a temp asset dir."""
     monkeypatch.setenv("HATCH_DATABASE_URL", TEST_DATABASE_URL)
     monkeypatch.setenv("HATCH_MEDIA_PROVIDER", "fake")
     monkeypatch.setenv("HATCH_ASSET_DIR", str(tmp_path / "assets"))
     get_settings.cache_clear()
     yield tmp_path / "assets"
     get_settings.cache_clear()
-    tables = ", ".join(f'"{table.name}"' for table in Base.metadata.sorted_tables)
-    with engine.begin() as connection:
-        connection.execute(text(f"TRUNCATE {tables} CASCADE"))
 
 
 def test_run_fixture_produces_a_playable_short_without_manual_edits(
@@ -106,3 +103,25 @@ def test_lineage_command_prints_the_full_causal_record_as_json(
     assert document["hypothesis"]["source"] == "fixture"
     assert document["generation_attempts"][0]["status"] == "succeeded"
     assert document["final_asset"]["mime_type"] == "video/mp4"
+
+
+def test_background_run_is_processed_by_the_worker_and_listed(
+    cli_env: Path, committed_db: Engine
+) -> None:
+    queued = runner.invoke(app, ["run-fixture", "--background"])
+    assert queued.exit_code == 0, queued.output
+    assert "queued job" in queued.output
+    with Session(committed_db) as session:
+        assert session.scalars(select(Experiment)).one().video_status is VideoStatus.PROPOSED
+
+    worked = runner.invoke(app, ["worker", "--until-idle"])
+    listing = runner.invoke(app, ["jobs"])
+
+    assert worked.exit_code == 0, worked.output
+    with Session(committed_db) as session:
+        experiment = session.scalars(select(Experiment)).one()
+        assert experiment.video_status is VideoStatus.APPROVAL_PENDING
+    assert listing.exit_code == 0, listing.output
+    assert listing.output.count("succeeded") == 2
+    assert "produce_short" in listing.output and "run_qa" in listing.output
+    assert str(experiment.id) in listing.output

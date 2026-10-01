@@ -1,32 +1,39 @@
 """Hatch command-line interface."""
 
+import os
+import socket
 import uuid
 from dataclasses import replace
 from datetime import timedelta
-from typing import NoReturn
+from typing import Annotated, NoReturn
 
 import typer
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import __version__
 from app.bootstrap import (
     ConfigurationError,
     build_asset_store,
+    build_job_handlers,
     build_production_deps,
     build_qa_gates,
     open_session,
 )
 from app.budgets.reports import spend_report
 from app.config import Settings, get_settings
-from app.db import utcnow
+from app.db import make_engine, utcnow
 from app.experiments.fixtures import FIRST_SHORT
 from app.experiments.lineage import ExperimentNotFound, get_lineage
 from app.experiments.models import Experiment
 from app.experiments.service import create_experiment
 from app.experiments.states import VideoStatus
+from app.production.jobs import enqueue_production
 from app.production.models import Asset
 from app.production.run import ProductionDeps, ProductionResult, produce_short
 from app.quality.runner import run_quality_gates
+from app.scheduling.models import JobRun, JobStatus
+from app.scheduling.worker import Worker
 
 app = typer.Typer(help="Hatch — evolutionary kids' media studio.", no_args_is_help=True)
 
@@ -52,7 +59,12 @@ def info() -> None:
 
 
 @app.command("run-fixture")
-def run_fixture() -> None:
+def run_fixture(
+    background: Annotated[
+        bool,
+        typer.Option("--background", help="Queue the work for `hatch worker` instead of running."),
+    ] = False,
+) -> None:
     """Create the hard-coded vertical-slice experiment and produce its Short."""
     settings = get_settings()
     deps = _production_deps(settings)  # fail before creating anything
@@ -60,7 +72,65 @@ def run_fixture() -> None:
         experiment = create_experiment(session, FIRST_SHORT)
         session.commit()
         typer.echo(f"experiment: {experiment.id}")
-        _produce(session, settings, deps, experiment.id)
+        if background:
+            job = enqueue_production(session, experiment.id)
+            session.commit()
+            typer.echo(f"queued job: {job.id} (run `hatch worker` to process it)")
+        else:
+            _produce(session, settings, deps, experiment.id)
+
+
+@app.command()
+def worker(
+    until_idle: Annotated[
+        bool,
+        typer.Option("--until-idle", help="Exit when no job is due instead of waiting for more."),
+    ] = False,
+) -> None:
+    """Run background jobs (generation, QA, ...) from the durable queue."""
+    settings = get_settings()
+    try:
+        handlers = build_job_handlers(settings)
+    except ConfigurationError as exc:
+        _fail(str(exc))
+    engine = make_engine(settings.database_url)
+    job_worker = Worker(
+        lambda: Session(engine, expire_on_commit=False),
+        handlers,
+        worker_id=f"{socket.gethostname()}:{os.getpid()}",
+    )
+    try:
+        if until_idle:
+            while job_worker.run_once():
+                pass
+        else:
+            typer.echo("worker started; press Ctrl+C to stop")
+            job_worker.run_forever()
+    except KeyboardInterrupt:
+        typer.echo("worker stopped")
+    finally:
+        engine.dispose()
+
+
+@app.command()
+def jobs(
+    status: Annotated[JobStatus | None, typer.Option(help="Only show jobs in this status.")] = None,
+    limit: Annotated[int, typer.Option(help="Maximum number of jobs to show.")] = 30,
+) -> None:
+    """List background jobs, newest first: status, attempts, timing, experiment."""
+    with open_session(get_settings()) as session:
+        query = select(JobRun).order_by(JobRun.created_at.desc()).limit(limit)
+        if status is not None:
+            query = query.where(JobRun.status == status)
+        for job in session.scalars(query):
+            finished = job.finished_at.strftime("%Y-%m-%d %H:%M:%S") if job.finished_at else "-"
+            typer.echo(
+                f"{job.status.value:<10} {job.job_type:<16} attempts={job.attempts}/"
+                f"{job.max_attempts} experiment={job.experiment_id or '-'} "
+                f"finished={finished} id={job.id}"
+            )
+            if job.error:
+                typer.echo(f"           error: {job.error}")
 
 
 @app.command()
@@ -86,7 +156,7 @@ def lineage(experiment_id: uuid.UUID) -> None:
 
 
 @app.command()
-def costs(days: int = typer.Option(30, help="Report window in days.")) -> None:
+def costs(days: Annotated[int, typer.Option(help="Report window in days.")] = 30) -> None:
     """Print, as JSON, spend by video, IP, provider and day."""
     since = utcnow() - timedelta(days=days)
     with open_session(get_settings()) as session:
