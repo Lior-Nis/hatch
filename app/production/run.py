@@ -144,6 +144,7 @@ def _start_attempt(
     else:
         # The creative spec is the script and the single-shot prompt is the
         # storyboard in this slice, so both lifecycle steps are already done.
+        experiment.video_status = VideoStatus.SCRIPTED
         experiment.video_status = VideoStatus.STORYBOARDED
     session.commit()
     return attempt
@@ -169,6 +170,7 @@ def _submit(
     """Start the provider job. Safe to repeat: the provider call is idempotent
     on the attempt's key."""
     request = MediaRequest.model_validate(attempt.request)
+    experiment.video_status = VideoStatus.GENERATING
     try:
         job = deps.generator.submit(request)
     except ProviderError as exc:
@@ -177,7 +179,6 @@ def _submit(
     attempt.provider_job_id = job.provider_job_id
     attempt.status = AttemptStatus.RUNNING
     attempt.started_at = utcnow()
-    experiment.video_status = VideoStatus.GENERATING
     session.commit()
     return True
 

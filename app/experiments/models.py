@@ -9,10 +9,16 @@ import uuid
 from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.db import Base, Identified, JSONDict, enum_column
-from app.experiments.states import ExperimentConclusion, ExperimentStatus, VideoStatus
+from app.experiments.states import (
+    EXPERIMENT_LIFECYCLE,
+    VIDEO_LIFECYCLE,
+    ExperimentConclusion,
+    ExperimentStatus,
+    VideoStatus,
+)
 from app.ips.models import IP
 
 if TYPE_CHECKING:
@@ -93,3 +99,23 @@ class Experiment(Identified, Base):
     ledger_entries: Mapped[list["BudgetLedgerEntry"]] = relationship(
         back_populates="experiment", order_by="BudgetLedgerEntry.created_at"
     )
+
+    @validates("status")
+    def _check_status(self, _key: str, target: ExperimentStatus) -> ExperimentStatus:
+        if target is ExperimentStatus.CONCLUDED and self.conclusion is None:
+            raise ValueError("an experiment needs a conclusion to be concluded; use conclude()")
+        return EXPERIMENT_LIFECYCLE.validate_assignment(self.status, target)
+
+    @validates("video_status")
+    def _check_video_status(self, _key: str, target: VideoStatus) -> VideoStatus:
+        return VIDEO_LIFECYCLE.validate_assignment(self.video_status, target)
+
+    def conclude(self, conclusion: ExperimentConclusion) -> None:
+        """Close the experiment with its verdict. A conclusion is final."""
+        if self.conclusion is not None:
+            raise ValueError(f"experiment {self.id} is already concluded")
+        EXPERIMENT_LIFECYCLE.check(
+            self.status or EXPERIMENT_LIFECYCLE.initial, ExperimentStatus.CONCLUDED
+        )
+        self.conclusion = conclusion
+        self.status = ExperimentStatus.CONCLUDED

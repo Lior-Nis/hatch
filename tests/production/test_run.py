@@ -170,12 +170,14 @@ def test_interrupted_production_resumes_the_same_provider_job(
     assert len(loaded.ledger_entries) == 1
 
 
-def test_production_refuses_an_experiment_that_is_not_a_fresh_candidate(
+def test_production_refuses_an_experiment_whose_video_already_failed(
     session: Session, tmp_path: Path
 ) -> None:
     experiment = make_experiment(session)
-    experiment.video_status = VideoStatus.HUMAN_REJECTED
-    session.flush()
+    produce_short(session, experiment.id, deps(tmp_path, FakeMediaGenerator(fail_next=["boom"])))
+    healthy = FakeMediaGenerator()
 
-    with pytest.raises(ValueError, match="human_rejected"):
-        produce_short(session, experiment.id, deps(tmp_path, FakeMediaGenerator()))
+    with pytest.raises(ValueError, match="generation_failed"):
+        produce_short(session, experiment.id, deps(tmp_path, healthy))
+
+    assert healthy.submitted_requests == []

@@ -39,8 +39,9 @@ def create_experiment(session: Session, spec: ExperimentSpec) -> Experiment:
         genome=genome,
         generation_reason=spec.generation_reason,
         output_requirements=spec.output.model_dump(mode="json"),
-        status=ExperimentStatus.CANDIDATE_CREATED,
     )
     session.add(experiment)
+    # Hypothesis and genome exist, so the candidate is fully specified.
+    experiment.status = ExperimentStatus.CANDIDATE_CREATED
     session.flush()
     return experiment

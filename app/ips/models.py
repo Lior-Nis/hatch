@@ -1,8 +1,8 @@
 from sqlalchemy import String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from app.db import Base, Identified, JSONDict, enum_column
-from app.ips.states import IPStatus
+from app.ips.states import IP_LIFECYCLE, IPStatus
 
 
 class IP(Identified, Base):
@@ -16,3 +16,7 @@ class IP(Identified, Base):
     status: Mapped[IPStatus] = mapped_column(enum_column(IPStatus), default=IPStatus.IDEA)
     spec: Mapped[JSONDict]
     """World rules, age target, visual identity, safety constraints."""
+
+    @validates("status")
+    def _check_status(self, _key: str, target: IPStatus) -> IPStatus:
+        return IP_LIFECYCLE.validate_assignment(self.status, target)
