@@ -106,7 +106,7 @@ def test_the_loop_closes_from_evidence_to_the_next_experiment(
     map_all(session, ip)
     store = LocalAssetStore(tmp_path / "assets", public_base_url="https://media.example.com")
     generator = FakeMediaGenerator(cost_per_second_usd=Decimal("0.05"))
-    publisher = FakePublisher(accounts=set(CHANNELS.values()))
+    publisher = FakePublisher(accounts=set(CHANNELS.values()), clock=clock)
     llm = FakeLanguageModel([story_draft(i) for i in range(len(STORIES))])
     governor = BudgetGovernor(LIMITS)
     policy = EvolutionPolicy()
@@ -165,11 +165,8 @@ def test_the_loop_closes_from_evidence_to_the_next_experiment(
     posted = clock.now = datetime(2026, 10, 1, 15, 5, tzinfo=UTC)
     for publication in session.scalars(select(Publication)):
         publisher.deliver(publication.external_id or "")
-        publication.published_at = posted
     run()
-    for publication in session.scalars(select(Publication)):
-        publication.published_at = posted  # the fake publisher stamps real time
-    session.flush()
+    assert {p.published_at for p in session.scalars(select(Publication))} == {posted}
 
     # 4. Three days later the evidence is in: observations, video fitness, IP fitness.
     clock.now = posted + timedelta(hours=73)

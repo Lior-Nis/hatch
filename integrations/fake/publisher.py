@@ -1,5 +1,6 @@
 """Fake publisher: in-memory, idempotent on ``publication_id``."""
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from app.platforms import Platform
@@ -16,8 +17,14 @@ from app.publishing.ports import (
 class FakePublisher:
     provider = "fake"
 
-    def __init__(self, *, accounts: set[str]) -> None:
+    def __init__(
+        self,
+        *,
+        accounts: set[str],
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
         self._accounts = accounts
+        self._clock = clock
         self._external_by_publication: dict[str, str] = {}
         self._status: dict[str, PublicationStatus] = {}
         self.requests: dict[str, PublishRequest] = {}
@@ -35,7 +42,7 @@ class FakePublisher:
             state=PublicationState.PUBLISHED,
             platform_post_id=post_id,
             permalink=f"https://fake.example/{request.platform.value}/{post_id}",
-            published_at=datetime.now(UTC),
+            published_at=self._clock(),
         )
         return self._create(request, status)
 
@@ -47,7 +54,7 @@ class FakePublisher:
             state=PublicationState.PUBLISHED,
             platform_post_id=post_id,
             permalink=f"https://fake.example/{request.platform.value}/{post_id}",
-            published_at=datetime.now(UTC),
+            published_at=self._clock(),
         )
 
     def fail(self, external_id: str, error: str) -> None:
