@@ -33,8 +33,16 @@ class FakeAnalyticsAdapter:
             platform_post_id=platform_post_id,
             observed_at=datetime.now(UTC),
             raw=raw,
-            normalized=NormalizedMetrics(
-                views=_as_int(raw.get("play_count")),
-                completion_rate=_as_float(raw.get("full_video_watched_rate")),
+            normalized=NormalizedMetrics.model_validate(
+                {
+                    # Raw keys named like normalized signals pass straight through.
+                    **{k: v for k, v in raw.items() if k in NormalizedMetrics.model_fields},
+                    **({"views": _as_int(raw["play_count"])} if "play_count" in raw else {}),
+                    **(
+                        {"completion_rate": _as_float(raw["full_video_watched_rate"])}
+                        if "full_video_watched_rate" in raw
+                        else {}
+                    ),
+                }
             ),
         )

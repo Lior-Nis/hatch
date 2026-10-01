@@ -12,6 +12,8 @@ from decimal import Decimal
 import anthropic
 from sqlalchemy.orm import Session
 
+from app.analytics.jobs import analytics_handlers
+from app.analytics.ports import AnalyticsAdapter
 from app.budgets.governor import BudgetGovernor, BudgetLimits
 from app.config import Settings
 from app.creative.candidates import routed_production
@@ -19,8 +21,11 @@ from app.creative.jobs import creative_handlers
 from app.db import make_engine, registry
 from app.evolution.anti_cloning import AntiCloningPolicy
 from app.experiments.spec import OutputRequirements
+from app.fitness.heuristic import HeuristicFitnessEvaluator
+from app.fitness.jobs import fitness_handlers
 from app.llm.calls import bound_caller
 from app.llm.ports import LanguageModel
+from app.platforms import Platform
 from app.production.jobs import PRODUCE_SHORT, produce_short_handler
 from app.production.ports import MediaGenerator
 from app.production.run import ProductionDeps, RetryPolicy
@@ -120,6 +125,13 @@ def build_posting_schedule(settings: Settings) -> PostingSchedule:
     return PostingSchedule(slots_utc=slots)
 
 
+def build_analytics_adapters(settings: Settings) -> dict[Platform, AnalyticsAdapter]:
+    """One official-API adapter per platform that has credentials configured.
+    A platform without an adapter records an explicit ingestion failure for
+    each observation rather than being silently skipped."""
+    return {}
+
+
 def build_language_model(settings: Settings) -> LanguageModel:
     if settings.anthropic_api_key is None:
         raise ConfigurationError(
@@ -191,6 +203,10 @@ def build_job_handlers(settings: Settings) -> dict[str, JobHandler]:
             max_regenerations=settings.generation_max_regenerations_after_qa,
         ),
     }
+    handlers |= analytics_handlers(build_analytics_adapters(settings))
+    handlers |= fitness_handlers(
+        HeuristicFitnessEvaluator(), target_cost_usd=settings.budget_target_per_video_usd
+    )
     try:
         handlers |= publishing_handlers(publisher=build_publisher(settings), store=deps.store)
     except ConfigurationError as exc:

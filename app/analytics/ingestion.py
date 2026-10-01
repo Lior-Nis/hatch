@@ -31,6 +31,9 @@ CHECKPOINTS: dict[str, timedelta] = {
 }
 EARLY_EVALUATION_CHECKPOINT = "72h"
 FINAL_CHECKPOINT = "30d"
+# Before 72h platforms only expose public counters (watch time and completion
+# lag 48–72h), so fitness is first evaluated at 72h and refreshed afterwards.
+EVALUATION_CHECKPOINTS = ("72h", "7d", "30d")
 
 
 class IngestionNotAllowed(Exception):

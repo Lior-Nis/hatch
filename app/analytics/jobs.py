@@ -7,12 +7,14 @@ from sqlalchemy.orm import Session
 
 from app.analytics.ingestion import (
     CHECKPOINTS,
+    EVALUATION_CHECKPOINTS,
     IngestionNotAllowed,
     ingest_publication,
     record_ingestion_failure,
 )
 from app.analytics.ports import AnalyticsAdapter, AnalyticsError
 from app.db import utcnow
+from app.fitness.jobs import enqueue_fitness_evaluation
 from app.platforms import Platform
 from app.publishing.models import Publication
 from app.scheduling.models import JobRun
@@ -66,6 +68,8 @@ def analytics_handlers(adapters: Mapping[Platform, AnalyticsAdapter]) -> dict[st
             if exc.retryable and job.attempts < job.max_attempts:
                 raise
             raise give_up(str(exc)) from exc
+        if checkpoint in EVALUATION_CHECKPOINTS:
+            enqueue_fitness_evaluation(session, snapshot, now=job.started_at)
         return {"snapshot_id": str(snapshot.id), "checkpoint": checkpoint}
 
     return {INGEST_METRICS: ingest}

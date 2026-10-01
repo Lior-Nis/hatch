@@ -7,7 +7,7 @@ can be reproduced and re-derived when the formula changes.
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,9 +22,13 @@ class FitnessInputs(BaseModel):
     metrics: NormalizedMetrics
     hours_since_publication: float
     production_cost_usd: Decimal
+    target_cost_usd: Decimal | None = None
+    duration_seconds: float | None = None
+    """Length of the video, to turn watch seconds into a watched fraction."""
     observed_at: datetime
     baseline: NormalizedMetrics | None = None
-    """Historical baseline for the same platform account, when available."""
+    """Typical values for the same platform account at the same maturity,
+    when it has enough history. Without it, platform priors are used."""
 
 
 class FitnessResult(BaseModel):
@@ -33,7 +37,11 @@ class FitnessResult(BaseModel):
     evaluator: str
     evaluator_version: str
     score: float
+    """0–1, where 0.5 means "as good as this account's baseline"."""
+    confidence: float = 1.0
+    """0–1: how much evidence stands behind the score."""
     components: dict[str, float] = Field(default_factory=dict)
+    details: dict[str, Any] = Field(default_factory=dict)
     inputs: FitnessInputs
 
 

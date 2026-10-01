@@ -20,7 +20,7 @@ from app.analytics.ports import AnalyticsError
 from app.experiments.models import Experiment
 from app.experiments.states import ExperimentStatus, VideoStatus
 from app.platforms import Platform
-from app.publishing.models import Publication, PublicationRecordStatus
+from app.publishing.models import PlatformAccount, Publication, PublicationRecordStatus
 from app.publishing.service import plan_publications, refresh_publications, submit_publications
 from app.quality.models import ReviewDecision
 from app.quality.review import submit_review
@@ -50,7 +50,11 @@ def published_experiment(session: Session, tmp_path: Path) -> Experiment:
     submit_review(
         session, experiment.id, decision=ReviewDecision.APPROVE, reason="ok", reviewer="lior"
     )
-    map_all(session, experiment.ip)
+    already_mapped = session.scalars(
+        select(PlatformAccount).where(PlatformAccount.ip_id == experiment.ip_id)
+    ).first()
+    if already_mapped is None:
+        map_all(session, experiment.ip)
     publisher = FakePublisher(accounts=set(CHANNELS.values()))
     plan_publications(session, experiment.id, scheduled_at=PUBLISHED_AT)
     submit_publications(session, experiment.id, publisher=publisher, store=store)
