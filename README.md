@@ -48,6 +48,11 @@ Evolution (needs the Anthropic key; runs by itself every 6 hours while a worker 
     uv run hatch evolve [ip-slug]                        # run one cycle now
     uv run hatch decisions                               # what was decided and why
 
+Higgsfield SDK example (one billable Seedance 2.5 clip, outside Hatch's budget governor):
+
+    # .env.local (git-ignored): HF_KEY=<key id>:<key secret>
+    uv run python -m examples.seedance_2_5.main          # prints the video URL, or why there is none
+
 Operations:
 
     uv run hatch trace <experiment_id>                   # everything that happened, in order

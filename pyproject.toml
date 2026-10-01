@@ -9,11 +9,13 @@ dependencies = [
     "anthropic>=1.0",
     "boto3>=1.35",
     "fastapi>=0.115",
+    "higgsfield-client>=0.2.0",
     "httpx>=0.28",
     "jinja2>=3.1",
     "psycopg[binary]>=3.2",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
+    "python-dotenv>=1.2.4",
     "python-multipart>=0.0.18",
     "sqlalchemy>=2.0.36",
     "typer>=0.15",
@@ -60,8 +62,8 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["app", "integrations", "tests"]
+files = ["app", "integrations", "examples", "tests"]
 
 [[tool.mypy.overrides]]
-module = ["boto3.*", "botocore.*", "moto.*"]
+module = ["boto3.*", "botocore.*", "moto.*", "higgsfield_client.*"]
 ignore_missing_imports = true
