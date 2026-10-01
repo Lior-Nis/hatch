@@ -163,6 +163,12 @@ def test_baselines_are_never_pooled_across_platforms(session: Session, tmp_path:
 # --- the 72h checkpoint, through the queue ------------------------------------------
 
 
+def video_scores(session: Session) -> list[FitnessSnapshot]:
+    return list(
+        session.scalars(select(FitnessSnapshot).where(FitnessSnapshot.scope == FitnessScope.VIDEO))
+    )
+
+
 def run_jobs(session: Session, adapters: dict[Platform, Any], clock: Clock) -> None:
     @contextmanager
     def sessions() -> Iterator[Session]:
@@ -200,14 +206,18 @@ def test_72h_is_the_first_evaluation_and_later_windows_keep_updating(
     clock.now = PUBLISHED_AT + timedelta(hours=73)
     run_jobs(session, adapters, clock)
     session.expire_all()
-    [early] = session.scalars(select(FitnessSnapshot)).all()
+    [early] = video_scores(session)
     assert early.checkpoint == "72h"
+    ip_score = session.scalars(
+        select(FitnessSnapshot).where(FitnessSnapshot.scope == FitnessScope.IP)
+    ).one()
+    assert ip_score.inputs["sufficient_evidence"] is False  # one video is not enough
     assert session.get_one(Experiment, experiment.id).status is ExperimentStatus.EARLY_EVALUATED
 
     clock.now = PUBLISHED_AT + timedelta(days=31)
     run_jobs(session, adapters, clock)
     session.expire_all()
-    checkpoints = {f.checkpoint for f in session.scalars(select(FitnessSnapshot))}
+    checkpoints = {f.checkpoint for f in video_scores(session)}
     assert checkpoints == {"72h", "7d", "30d"}
     matured = session.get_one(Experiment, experiment.id)
     assert matured.status is ExperimentStatus.MATURED

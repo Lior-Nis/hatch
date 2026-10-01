@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.analytics.models import MetricSnapshot
 from app.fitness.heuristic import InsufficientSignals
+from app.fitness.ip_aggregate import aggregate_ip_fitness
 from app.fitness.ports import FitnessEvaluator
 from app.fitness.service import advance_for_checkpoint, evaluate_snapshot
 from app.scheduling.models import JobRun
@@ -44,6 +45,14 @@ def fitness_handlers(
             return {"scored": False, "reason": str(exc)}
         assert fitness is not None
         advance_for_checkpoint(experiment, snapshot.checkpoint)
-        return {"scored": True, "fitness_snapshot_id": str(fitness.id), "score": fitness.score}
+        # New video evidence changes what we know about the IP.
+        ip_fitness = aggregate_ip_fitness(session, experiment.ip)
+        return {
+            "scored": True,
+            "fitness_snapshot_id": str(fitness.id),
+            "score": fitness.score,
+            "ip_fitness_snapshot_id": str(ip_fitness.id),
+            "ip_score": ip_fitness.score,
+        }
 
     return {EVALUATE_FITNESS: evaluate}
