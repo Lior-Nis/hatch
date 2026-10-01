@@ -49,6 +49,11 @@ Operations:
     uv run hatch trace <experiment_id>                   # everything that happened, in order
     uv run hatch health                                  # provider failures, failed jobs, stalls (exit 1 on problems)
 
+Pilot:
+
+    uv run hatch audit-analytics                         # every due observation collected or explicitly failed (exit 1 on gaps)
+    uv run hatch pilot-report > pilot-review.md          # the seven pilot questions, economics, recommendation
+
 Logs are JSON lines on stderr (`HATCH_LOG_FORMAT=text` for plain text).
 
 Every paid call is priced first and must pass the budget governor

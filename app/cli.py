@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import __version__
+from app.analytics.audit import analytics_completeness
 from app.analytics.ports import AnalyticsError
 from app.bootstrap import (
     ConfigurationError,
@@ -29,6 +30,7 @@ from app.bootstrap import (
     build_token_store,
     open_session,
 )
+from app.budgets.governor import BudgetLimits
 from app.budgets.reports import spend_report
 from app.config import Settings, get_settings
 from app.db import make_engine, utcnow
@@ -47,6 +49,7 @@ from app.knowledge.models import KnowledgeSummary
 from app.observability.health import find_stalls, provider_health
 from app.observability.logging import configure_logging
 from app.observability.trace import experiment_timeline, render_timeline
+from app.pilot.report import pilot_report, render_memo
 from app.platforms import Platform
 from app.production.catalog import seed_provider_models
 from app.production.jobs import enqueue_production
@@ -210,6 +213,35 @@ def evolve(
                 f"{report.lifecycle_transitions} lifecycle change(s), {report.planned} planned "
                 f"({report.in_pipeline} already in the pipeline)"
             )
+
+
+@app.command("audit-analytics")
+def audit_analytics() -> None:
+    """Check that every due observation was collected or explicitly failed."""
+    with open_session(get_settings()) as session:
+        report = analytics_completeness(session)
+    typer.echo(
+        f"{report.posts} published posts; {report.due} observations due: {report.collected} "
+        f"collected, {report.failed} failed, {report.missing} missing"
+    )
+    for gap in report.gaps[:50]:
+        typer.echo(
+            f"  missing {gap.platform.value} {gap.checkpoint} for experiment "
+            f"{gap.experiment_id} (due {gap.due_at:%Y-%m-%d %H:%M} UTC)"
+        )
+    if not report.complete:
+        raise typer.Exit(code=1)
+
+
+@app.command("pilot-report")
+def pilot_report_command(
+    days: Annotated[int, typer.Option(help="Length of the review period.")] = 30,
+) -> None:
+    """Print the pilot review memo (Markdown) with data for the scale/iterate/stop decision."""
+    settings = get_settings()
+    with open_session(settings) as session:
+        report = pilot_report(session, limits=BudgetLimits.from_settings(settings), days=days)
+        typer.echo(render_memo(report))
 
 
 @app.command()

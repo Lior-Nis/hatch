@@ -74,10 +74,25 @@ class Worker:
             self._run(session, job)
             return True
 
-    def run_forever(self, *, poll_interval_seconds: float = 2.0) -> None:
-        while True:
-            if not self.run_once():
-                time.sleep(poll_interval_seconds)
+    def run_forever(
+        self,
+        *,
+        poll_interval_seconds: float = 2.0,
+        sleep: Callable[[float], None] = time.sleep,
+        should_stop: Callable[[], bool] = lambda: False,
+    ) -> None:
+        """Keep running jobs. An error outside job handling (for example the
+        database being briefly unreachable) is logged and waited out rather
+        than killing the worker."""
+        while not should_stop():
+            try:
+                idle = not self.run_once()
+            except Exception:
+                logger.exception("worker_loop_error", extra={"worker_id": self._worker_id})
+                sleep(max(poll_interval_seconds * 5, 5.0))
+                continue
+            if idle:
+                sleep(poll_interval_seconds)
 
     def _run(self, session: Session, job: JobRun) -> None:
         job_id: uuid.UUID = job.id
