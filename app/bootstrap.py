@@ -8,11 +8,13 @@ from contextlib import contextmanager
 from datetime import timedelta
 from decimal import Decimal
 
+import anthropic
 from sqlalchemy.orm import Session
 
 from app.budgets.governor import BudgetGovernor, BudgetLimits
 from app.config import Settings
 from app.db import make_engine, registry
+from app.llm.ports import LanguageModel
 from app.production.jobs import PRODUCE_SHORT, produce_short_handler
 from app.production.ports import MediaGenerator
 from app.production.run import ProductionDeps
@@ -21,6 +23,7 @@ from app.quality.ports import QAGate
 from app.quality.technical import TechnicalQAGate
 from app.scheduling.worker import JobHandler
 from app.storage import AssetStore
+from integrations.anthropic.language_model import AnthropicLanguageModel
 from integrations.fake.media import FakeMediaGenerator
 from integrations.higgsfield.generator import HiggsfieldMediaGenerator
 from integrations.object_storage.local import LocalAssetStore
@@ -78,6 +81,18 @@ def build_media_generator(settings: Settings) -> MediaGenerator:
     return HiggsfieldMediaGenerator(
         api_key=settings.higgsfield_api_key.get_secret_value(),
         api_secret=settings.higgsfield_api_secret.get_secret_value(),
+    )
+
+
+def build_language_model(settings: Settings) -> LanguageModel:
+    if settings.anthropic_api_key is None:
+        raise ConfigurationError(
+            "The Anthropic API key is missing: set HATCH_ANTHROPIC_API_KEY in .env."
+        )
+    return AnthropicLanguageModel(
+        client=anthropic.Anthropic(api_key=settings.anthropic_api_key.get_secret_value()),
+        model=settings.llm_model,
+        effort=settings.llm_effort,
     )
 
 

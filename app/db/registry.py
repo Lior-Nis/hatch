@@ -8,6 +8,7 @@ from app.experiments import models as experiments_models
 from app.fitness import models as fitness_models
 from app.ips import models as ips_models
 from app.knowledge import models as knowledge_models
+from app.llm import models as llm_models
 from app.production import models as production_models
 from app.publishing import models as publishing_models
 from app.quality import models as quality_models
@@ -22,6 +23,7 @@ __all__ = [
     "fitness_models",
     "ips_models",
     "knowledge_models",
+    "llm_models",
     "production_models",
     "publishing_models",
     "quality_models",

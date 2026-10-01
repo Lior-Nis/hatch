@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     generation_poll_interval_seconds: float = 5.0
     generation_timeout_seconds: float = 900.0
 
+    # Language model for creative agents and content QA (Claude API).
+    anthropic_api_key: SecretStr | None = None
+    llm_model: str = "claude-opus-5-5"
+    llm_effort: Literal["low", "medium", "high", "xhigh", "max"] = "high"
+
     # Name recorded on human review decisions. Defaults to the OS user.
     reviewer: str | None = None
 

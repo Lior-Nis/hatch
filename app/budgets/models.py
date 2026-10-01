@@ -25,7 +25,9 @@ class BudgetLedgerEntry(Evidence, Identified, Base):
     the estimate before the call; settled once afterwards and never rewritten."""
 
     __tablename__ = "budget_ledger"
-    __mutable_columns__ = frozenset({"status", "actual_cost_usd", "settled_at"})
+    # experiment_id is set once, when spend made before a candidate existed
+    # (e.g. the model call that proposed it) is attributed to it.
+    __mutable_columns__ = frozenset({"status", "actual_cost_usd", "settled_at", "experiment_id"})
 
     provider: Mapped[str] = mapped_column(String(60))
     model: Mapped[str] = mapped_column(String(120))

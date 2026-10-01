@@ -86,11 +86,12 @@ class BudgetGovernor:
         model: str,
         operation: str,
         estimated_cost_usd: Decimal,
-        experiment_id: uuid.UUID,
+        experiment_id: uuid.UUID | None,
         generation_attempt_id: uuid.UUID | None = None,
     ) -> BudgetLedgerEntry:
         """Hold ``estimated_cost_usd`` against every ceiling, or raise
-        ``BudgetExceeded`` after logging the refusal in the ledger."""
+        ``BudgetExceeded`` after logging the refusal in the ledger. Spend that
+        belongs to no experiment (yet) skips only the per-video ceiling."""
         # Serialise reservations so two workers cannot both fit under a ceiling.
         session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _ADVISORY_LOCK_KEY})
         now = self._clock()
@@ -116,7 +117,7 @@ class BudgetGovernor:
             logger.warning(
                 "budget_blocked",
                 extra={
-                    "experiment_id": str(experiment_id),
+                    "experiment_id": str(experiment_id) if experiment_id else None,
                     "estimated_cost_usd": str(estimated_cost_usd),
                     "limits": [v.limit for v in violations],
                 },
@@ -149,15 +150,18 @@ class BudgetGovernor:
         return Decimal(total or 0)
 
     def _violations(
-        self, session: Session, experiment_id: uuid.UUID, requested: Decimal, now: datetime
+        self, session: Session, experiment_id: uuid.UUID | None, requested: Decimal, now: datetime
     ) -> list[LimitViolation]:
-        checks = [
-            ("per_generation", self._limits.max_per_generation_usd, Decimal("0")),
-            (
-                "per_video",
-                self._limits.max_per_video_usd,
-                self.committed_spend_for_experiment(session, experiment_id),
-            ),
+        checks = [("per_generation", self._limits.max_per_generation_usd, Decimal("0"))]
+        if experiment_id is not None:
+            checks.append(
+                (
+                    "per_video",
+                    self._limits.max_per_video_usd,
+                    self.committed_spend_for_experiment(session, experiment_id),
+                )
+            )
+        checks += [
             (
                 "daily",
                 self._limits.daily_usd,
