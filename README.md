@@ -11,6 +11,10 @@ loop around video generation:
 The product contract (PRD) and the execution backlog live in the Todoist
 project **Hatch**. Read the PRD item there before changing behaviour.
 
+See `docs/runbook.md` for the path from an empty machine to a running pilot and
+`docs/architecture.md` for the module map, hard boundaries and recorded
+assumptions.
+
 ## Quick start
 
     uv sync          # install dependencies into .venv
