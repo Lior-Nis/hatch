@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     )
 
     env: str = "development"
+    database_url: str = "postgresql+psycopg://hatch:hatch@localhost:54329/hatch"
 
     # Budget contract (USD). Defaults are the PRD's initial production limits.
     budget_target_per_video_usd: Decimal = Decimal("0.50")

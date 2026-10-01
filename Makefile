@@ -1,4 +1,4 @@
-.PHONY: install lint format typecheck test check
+.PHONY: install lint format typecheck test check db-up db-down migrate
 
 install:
 	uv sync
@@ -14,7 +14,16 @@ format:
 typecheck:
 	uv run mypy
 
-test:
+db-up:
+	docker compose up -d --wait db
+
+db-down:
+	docker compose down
+
+migrate: db-up
+	uv run alembic upgrade head
+
+test: db-up
 	uv run pytest
 
 check: lint typecheck test

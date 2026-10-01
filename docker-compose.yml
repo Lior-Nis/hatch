@@ -1,0 +1,20 @@
+# Local development infrastructure. Not a production topology.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: hatch
+      POSTGRES_PASSWORD: hatch
+      POSTGRES_DB: hatch
+    ports:
+      - "127.0.0.1:54329:5432"
+    volumes:
+      - hatch-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hatch -d hatch"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  hatch-pgdata:

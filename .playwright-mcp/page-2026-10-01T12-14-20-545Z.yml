@@ -1,0 +1,123 @@
+- generic [active] [ref=e1]:
+  - navigation "Mobile navigation" [ref=e3]:
+    - generic [ref=e4]:
+      - link [ref=e5] [cursor=pointer]:
+        - /url: /
+        - img "Higgsfield" [ref=e6]
+      - generic [ref=e8]: Pricing
+    - generic [ref=e9]:
+      - button "Search models" [ref=e11] [cursor=pointer]
+      - button "Open the Higgsfield API navigation" [ref=e15] [cursor=pointer]
+  - main [ref=e18]:
+    - generic [ref=e22]:
+      - generic [ref=e23]: Pricing
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - generic [ref=e27]:
+            - generic [ref=e28]:
+              - heading "Models API pricing" [level=2] [ref=e29]
+              - paragraph [ref=e30]: The best prices on the market with the most cost-effective offers
+            - generic [ref=e31]:
+              - generic "Pricing category" [ref=e33]:
+                - tablist [ref=e34]:
+                  - tab "All models" [selected] [ref=e35] [cursor=pointer]
+                  - tab "Video" [ref=e38] [cursor=pointer]
+                  - tab "Image" [ref=e41] [cursor=pointer]
+              - generic [ref=e44]:
+                - generic [ref=e45]:
+                  - generic [ref=e48]: Search models
+                  - searchbox "Search models" [ref=e49]
+                - button "Compare prices with others" [ref=e50] [cursor=pointer]
+            - generic "Loading pricing models" [ref=e54]:
+              - table [aria-hidden] [ref=e57]:
+                - rowgroup [ref=e64]:
+                  - row [ref=e65]:
+                    - cell [ref=e66]
+                    - cell [ref=e70]
+                    - cell [ref=e72]
+                    - cell [ref=e74]
+                    - cell [ref=e76]
+                  - row [ref=e78]:
+                    - cell [ref=e79]
+                    - cell [ref=e83]
+                    - cell [ref=e85]
+                    - cell [ref=e87]
+                    - cell [ref=e89]
+                  - row [ref=e91]:
+                    - cell [ref=e92]
+                    - cell [ref=e96]
+                    - cell [ref=e98]
+                    - cell [ref=e100]
+                    - cell [ref=e102]
+                  - row [ref=e104]:
+                    - cell [ref=e105]
+                    - cell [ref=e109]
+                    - cell [ref=e111]
+                    - cell [ref=e113]
+                    - cell [ref=e115]
+                  - row [ref=e117]:
+                    - cell [ref=e118]
+                    - cell [ref=e122]
+                    - cell [ref=e124]
+                    - cell [ref=e126]
+                    - cell [ref=e128]
+                  - row [ref=e130]:
+                    - cell [ref=e131]
+                    - cell [ref=e135]
+                    - cell [ref=e137]
+                    - cell [ref=e139]
+                    - cell [ref=e141]
+                  - row [ref=e143]:
+                    - cell [ref=e144]
+                    - cell [ref=e148]
+                    - cell [ref=e150]
+                    - cell [ref=e152]
+                    - cell [ref=e154]
+                  - row [ref=e156]:
+                    - cell [ref=e157]
+                    - cell [ref=e161]
+                    - cell [ref=e163]
+                    - cell [ref=e165]
+                    - cell [ref=e167]
+                  - row [ref=e169]:
+                    - cell [ref=e170]
+                    - cell [ref=e174]
+                    - cell [ref=e176]
+                    - cell [ref=e178]
+                    - cell [ref=e180]
+                  - row [ref=e182]:
+                    - cell [ref=e183]
+                    - cell [ref=e187]
+                    - cell [ref=e189]
+                    - cell [ref=e191]
+                    - cell [ref=e193]
+          - region [ref=e196]:
+            - heading "Concurrency limits" [level=2] [ref=e197]
+            - generic [ref=e198]:
+              - generic [ref=e202]:
+                - paragraph [ref=e203]: Add funds to unlock more concurrent generation requests for your account
+                - button "Learn more" [ref=e204] [cursor=pointer]
+              - generic [ref=e220]:
+                - generic [ref=e221]:
+                  - paragraph [ref=e222]: Need higher limits?
+                  - paragraph [ref=e223]: Let's find the right limits for your workloads
+                - button "Contact sales" [ref=e224] [cursor=pointer]
+        - region [ref=e225]:
+          - heading "FAQ" [level=2] [ref=e226]
+          - generic [ref=e227]:
+            - generic [ref=e228]:
+              - button "What is Higgsfield API?" [expanded] [ref=e229] [cursor=pointer]
+              - region [ref=e237]:
+                - paragraph [ref=e238]: Higgsfield API gives developers one API for leading image and video models. Send a generation request, and Higgsfield handles the queueing, GPUs, and scaling before returning the generated file URL.
+            - button "How does Higgsfield API pricing work?" [ref=e240] [cursor=pointer]
+            - button "What's included in the Higgsfield API launch offer?" [ref=e249] [cursor=pointer]
+            - button "Do I need to talk to sales to start using Higgsfield API?" [ref=e258] [cursor=pointer]
+            - button "How do I integrate Higgsfield API?" [ref=e267] [cursor=pointer]
+            - button "Can I migrate from fal or Replicate to Higgsfield API?" [ref=e276] [cursor=pointer]
+            - button "Can AI agents use Higgsfield API?" [ref=e285] [cursor=pointer]
+            - button "What are the Higgsfield API rate limits?" [ref=e294] [cursor=pointer]
+            - button "How do I keep Higgsfield API spending under control?" [ref=e303] [cursor=pointer]
+            - button "How do teams use Higgsfield API?" [ref=e312] [cursor=pointer]
+            - button "Which models are available through Higgsfield API?" [ref=e321] [cursor=pointer]
+  - region "Notifications alt+T"
+  - alert [ref=e329]

@@ -14,7 +14,8 @@ project **Hatch**. Read the PRD item there before changing behaviour.
 ## Quick start
 
     uv sync          # install dependencies into .venv
-    make check       # lint + types + tests
+    make migrate     # start local Postgres (Docker) and apply migrations
+    make check       # lint + types + tests (tests use a separate hatch_test DB)
     uv run hatch info
 
 Copy `.env.example` to `.env` to override configuration locally. Every setting
@@ -31,6 +32,12 @@ committed) — never in Todoist, code, or logs.
 | `make typecheck` | mypy (strict)                        |
 | `make test`      | pytest                               |
 | `make check`     | lint + typecheck + test              |
+| `make db-up`     | start local Postgres (port 54329)    |
+| `make migrate`   | apply Alembic migrations             |
+
+Schema changes: edit the models, then
+`uv run alembic revision --autogenerate -m "..."`. A test fails if migrations
+and models drift apart.
 
 ## Layout
 
