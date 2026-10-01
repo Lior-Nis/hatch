@@ -3,6 +3,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.creative.genome import GENE_SPECS, parse_genes
+from app.creative.hypotheses import Metric, Prediction
 from app.evolution.models import MutationOperation, ParentRelation
 from app.evolution.mutation import create_mutant, create_recombinant
 from app.experiments.lineage import get_lineage
@@ -14,7 +15,13 @@ from tests.factories import make_experiment
 HYPOTHESIS = HypothesisSpec(
     statement="A cold open raises completion versus a visual question.",
     rationale="Parent completed well; test whether the hook mechanism matters.",
-    prediction={"metric": "completion_rate", "direction": "increase", "compared_to": "parent"},
+    prediction=Prediction(
+        metric=Metric.COMPLETION_RATE,
+        direction="increase",
+        compared_to="parent",
+        minimum_relative_effect=0.1,
+        genes_under_test=("hook_type",),
+    ),
     source="test",
 )
 

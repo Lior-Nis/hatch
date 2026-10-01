@@ -46,7 +46,7 @@ def persist_candidate(
             ip=ip,
             statement=hypothesis.statement,
             rationale=hypothesis.rationale,
-            prediction=dict(hypothesis.prediction),
+            prediction=hypothesis.prediction.model_dump(mode="json"),
             source=hypothesis.source,
         ),
         genome=CreativeGenome(

@@ -25,8 +25,10 @@ def call_model[T: BaseModel](
     schema: type[T],
     *,
     experiment_id: uuid.UUID | None = None,
+    recorded: list[uuid.UUID] | None = None,
 ) -> LLMResult[T]:
-    """Raises ``BudgetExceeded`` (nothing called) or ``LLMError`` (call recorded)."""
+    """Raises ``BudgetExceeded`` (nothing called) or ``LLMError`` (call recorded).
+    The id of the stored ``ModelCall`` is appended to ``recorded`` when given."""
     reservation = governor.reserve(
         session,
         provider=llm.provider,
@@ -50,6 +52,9 @@ def call_model[T: BaseModel](
     except LLMError as exc:
         call.error = str(exc)
         session.add(call)
+        session.flush()
+        if recorded is not None:
+            recorded.append(call.id)
         # Whether a failed call was billed is unknown: keep counting the estimate.
         governor.settle(session, reservation, actual_cost_usd=None)
         session.commit()
@@ -60,6 +65,9 @@ def call_model[T: BaseModel](
     call.output_tokens = result.usage.output_tokens
     call.cost_usd = result.cost_usd
     session.add(call)
+    session.flush()
+    if recorded is not None:
+        recorded.append(call.id)
     governor.settle(session, reservation, actual_cost_usd=result.cost_usd)
     session.commit()
     return result

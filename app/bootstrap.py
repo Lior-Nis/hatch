@@ -3,6 +3,7 @@
 The only place that knows which vendor implements which port.
 """
 
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import timedelta
@@ -13,7 +14,10 @@ from sqlalchemy.orm import Session
 
 from app.budgets.governor import BudgetGovernor, BudgetLimits
 from app.config import Settings
+from app.creative.candidates import ProductionDefaults
+from app.creative.jobs import creative_handlers
 from app.db import make_engine, registry
+from app.experiments.spec import OutputRequirements
 from app.llm.ports import LanguageModel
 from app.production.jobs import PRODUCE_SHORT, produce_short_handler
 from app.production.ports import MediaGenerator
@@ -30,6 +34,17 @@ from integrations.object_storage.local import LocalAssetStore
 from integrations.object_storage.s3 import S3AssetStore
 
 assert registry  # every ORM model must be registered before any session is used
+
+logger = logging.getLogger(__name__)
+
+# What a Short must satisfy unless a candidate says otherwise.
+DEFAULT_OUTPUT_REQUIREMENTS = OutputRequirements(
+    aspect_ratio="9:16",
+    min_duration_seconds=4,
+    max_duration_seconds=15,
+    min_height=800,
+    audio_expected=True,
+)
 
 
 class ConfigurationError(Exception):
@@ -114,9 +129,26 @@ def build_production_deps(settings: Settings) -> ProductionDeps:
 def build_job_handlers(settings: Settings) -> dict[str, JobHandler]:
     """Every background job type the worker can run."""
     deps = build_production_deps(settings)
-    return {
+    handlers: dict[str, JobHandler] = {
         PRODUCE_SHORT: produce_short_handler(
             deps, poll_interval=timedelta(seconds=settings.generation_poll_interval_seconds)
         ),
         RUN_QA: run_qa_handler(gates=build_qa_gates(settings), store=deps.store),
     }
+    try:
+        llm = build_language_model(settings)
+    except ConfigurationError as exc:
+        # Production and QA still run; creative jobs fail visibly as "no handler".
+        logger.warning("creative_jobs_disabled", extra={"reason": str(exc)})
+    else:
+        handlers |= creative_handlers(
+            llm=llm,
+            governor=deps.governor,
+            output=DEFAULT_OUTPUT_REQUIREMENTS,
+            production=ProductionDefaults(
+                video_model=settings.default_video_model,
+                resolution=settings.default_resolution,
+                prompt_strategy=settings.default_prompt_strategy,
+            ),
+        )
+    return handlers

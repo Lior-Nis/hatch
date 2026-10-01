@@ -5,6 +5,7 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from app.creative.genome import Genome
+from app.creative.hypotheses import Prediction
 
 
 class IPSpec(BaseModel):
@@ -21,7 +22,7 @@ class HypothesisSpec(BaseModel):
 
     statement: str = Field(min_length=1)
     rationale: str = Field(min_length=1)
-    prediction: dict[str, JsonValue]
+    prediction: Prediction
     source: str
 
 

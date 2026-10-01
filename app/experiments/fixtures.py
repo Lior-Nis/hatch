@@ -10,6 +10,7 @@ $0.50 target). 720p would be $0.80 (see docs/research/higgsfield-api.md).
 """
 
 from app.creative.genome import Genes, Genome
+from app.creative.hypotheses import Metric, Prediction
 from app.experiments.spec import ExperimentSpec, HypothesisSpec, IPSpec, OutputRequirements
 
 FIRST_SHORT = ExperimentSpec(
@@ -48,12 +49,13 @@ FIRST_SHORT = ExperimentSpec(
             "A curiosity gap gives a 4–8-year-old a reason to stay for the reveal; the "
             "reveal lands inside the same short so the question is always answered."
         ),
-        prediction={
-            "metric": "completion_rate",
-            "direction": "increase",
-            "compared_to": "ip_baseline",
-            "genes_under_test": ["hook_type"],
-        },
+        prediction=Prediction(
+            metric=Metric.COMPLETION_RATE,
+            direction="increase",
+            compared_to="ip_baseline",
+            minimum_relative_effect=0.1,
+            genes_under_test=("hook_type",),
+        ),
         source="fixture",
     ),
     genome=Genome(
