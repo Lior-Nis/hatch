@@ -27,8 +27,16 @@ class Settings(BaseSettings):
     env: str = "development"
     database_url: str = "postgresql+psycopg://hatch:hatch@localhost:54329/hatch"
 
-    # Generated media. Local filesystem until S3/R2 object storage is configured.
+    # Generated media. "local" keeps files under asset_dir; "s3" uses any
+    # S3-compatible object store (Cloudflare R2, AWS S3) and asset_dir as a
+    # download cache.
+    asset_store: Literal["local", "s3"] = "local"
     asset_dir: Path = Path("var/assets")
+    s3_bucket: str | None = None
+    s3_endpoint_url: str | None = None
+    s3_region: str = "auto"
+    s3_access_key_id: SecretStr | None = None
+    s3_secret_access_key: SecretStr | None = None
 
     # Media generation. "fake" renders free synthetic test videos locally.
     media_provider: Literal["higgsfield", "fake"] = "higgsfield"

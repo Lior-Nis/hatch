@@ -20,7 +20,13 @@ class AttemptStatus(StrEnum):
 
 
 class AssetKind(StrEnum):
+    STORYBOARD = "storyboard"
+    REFERENCE_IMAGE = "reference_image"
+    RAW_VIDEO = "raw_video"
+    AUDIO = "audio"
     FINAL_VIDEO = "final_video"
+    THUMBNAIL = "thumbnail"
+    QA_ARTIFACT = "qa_artifact"
 
 
 class GenerationAttempt(Evidence, Identified, Base):

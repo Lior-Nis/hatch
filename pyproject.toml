@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.14",
+    "boto3>=1.35",
     "fastapi>=0.115",
     "httpx>=0.28",
     "jinja2>=3.1",
@@ -24,6 +25,7 @@ hatch = "app.cli:app"
 [dependency-groups]
 dev = [
     "httpx2>=2.13.1",
+    "moto[s3,server]>=5",
     "mypy>=1.13",
     "pytest>=8.3",
     "ruff>=0.8",
@@ -58,3 +60,7 @@ python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 files = ["app", "integrations", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["boto3.*", "botocore.*", "moto.*"]
+ignore_missing_imports = true

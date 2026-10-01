@@ -24,6 +24,7 @@ from app.storage import AssetStore
 from integrations.fake.media import FakeMediaGenerator
 from integrations.higgsfield.generator import HiggsfieldMediaGenerator
 from integrations.object_storage.local import LocalAssetStore
+from integrations.object_storage.s3 import S3AssetStore
 
 assert registry  # every ORM model must be registered before any session is used
 
@@ -44,7 +45,25 @@ def open_session(settings: Settings) -> Iterator[Session]:
 
 
 def build_asset_store(settings: Settings) -> AssetStore:
-    return LocalAssetStore(settings.asset_dir)
+    if settings.asset_store == "local":
+        return LocalAssetStore(settings.asset_dir)
+    if (
+        settings.s3_bucket is None
+        or settings.s3_access_key_id is None
+        or settings.s3_secret_access_key is None
+    ):
+        raise ConfigurationError(
+            "S3 asset storage needs HATCH_S3_BUCKET, HATCH_S3_ACCESS_KEY_ID and "
+            "HATCH_S3_SECRET_ACCESS_KEY (plus HATCH_S3_ENDPOINT_URL for R2)."
+        )
+    return S3AssetStore.connect(
+        bucket=settings.s3_bucket,
+        endpoint_url=settings.s3_endpoint_url,
+        access_key_id=settings.s3_access_key_id.get_secret_value(),
+        secret_access_key=settings.s3_secret_access_key.get_secret_value(),
+        region=settings.s3_region,
+        cache_dir=settings.asset_dir / "s3-cache",
+    )
 
 
 def build_media_generator(settings: Settings) -> MediaGenerator:

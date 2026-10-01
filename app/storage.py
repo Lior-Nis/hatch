@@ -7,6 +7,10 @@ from typing import Protocol
 from pydantic import BaseModel, ConfigDict
 
 
+class AssetNotFound(Exception):
+    """No object exists at the given storage URI."""
+
+
 class StoredObject(BaseModel):
     model_config = ConfigDict(frozen=True)
 
