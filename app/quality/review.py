@@ -14,9 +14,9 @@ from app.experiments.states import VideoStatus
 from app.production.models import Asset, AssetKind
 from app.quality.models import HumanReview, ReviewDecision
 
-# Until automated QA gates exist, a generated video goes straight to a human.
-# Once they do, only APPROVAL_PENDING (i.e. QA already run) may be reviewed.
-REVIEWABLE = (VideoStatus.GENERATED, VideoStatus.APPROVAL_PENDING)
+# Only a video that has been through automated QA without a mandatory failure
+# reaches a human. A QA_REJECTED video can never be approved.
+REVIEWABLE = (VideoStatus.APPROVAL_PENDING,)
 
 
 class ReviewNotAllowed(Exception):

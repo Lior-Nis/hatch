@@ -13,6 +13,8 @@ from app.config import Settings
 from app.db import make_engine, registry
 from app.production.ports import MediaGenerator
 from app.production.run import ProductionDeps
+from app.quality.ports import QAGate
+from app.quality.technical import TechnicalQAGate
 from app.storage import AssetStore
 from integrations.fake.media import FakeMediaGenerator
 from integrations.higgsfield.generator import HiggsfieldMediaGenerator
@@ -52,6 +54,11 @@ def build_media_generator(settings: Settings) -> MediaGenerator:
         api_key=settings.higgsfield_api_key.get_secret_value(),
         api_secret=settings.higgsfield_api_secret.get_secret_value(),
     )
+
+
+def build_qa_gates(settings: Settings) -> list[QAGate]:
+    """Gates every generated video must go through, in order."""
+    return [TechnicalQAGate()]
 
 
 def build_production_deps(settings: Settings) -> ProductionDeps:

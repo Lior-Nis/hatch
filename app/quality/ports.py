@@ -27,6 +27,8 @@ class QACandidate(BaseModel):
     genes: dict[str, JsonValue]
     creative_spec: str
     hypothesis: str | None = None
+    requirements: dict[str, JsonValue] = Field(default_factory=dict)
+    """The experiment's output requirements (see ``OutputRequirements``)."""
 
 
 class QAVerdict(BaseModel):

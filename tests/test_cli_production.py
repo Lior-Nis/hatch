@@ -41,10 +41,10 @@ def test_run_fixture_produces_a_playable_short_without_manual_edits(
     result = runner.invoke(app, ["run-fixture"])
 
     assert result.exit_code == 0, result.output
-    assert "video status: generated" in result.output
+    assert "video status: approval_pending" in result.output
     with Session(engine) as session:
         experiment = session.scalars(select(Experiment)).one()
-        assert experiment.video_status is VideoStatus.GENERATED
+        assert experiment.video_status is VideoStatus.APPROVAL_PENDING
         [asset] = experiment.assets
     [stored] = list(cli_env.rglob("*.mp4"))
     assert stored.stat().st_size == asset.size_bytes
@@ -60,7 +60,7 @@ def test_produce_resumes_an_existing_experiment_by_id(cli_env: Path, engine: Eng
     result = runner.invoke(app, ["produce", str(experiment_id)])
 
     assert result.exit_code == 0, result.output
-    assert "video status: generated" in result.output
+    assert "video status: approval_pending" in result.output
     assert len(list(cli_env.rglob("*.mp4"))) == 1
 
 
@@ -89,7 +89,7 @@ def test_run_fixture_works_in_a_fresh_interpreter(cli_env: Path) -> None:
     )
 
     assert completed.returncode == 0, completed.stderr[-2000:]
-    assert "video status: generated" in completed.stdout
+    assert "video status: approval_pending" in completed.stdout
 
 
 def test_lineage_command_prints_the_full_causal_record_as_json(

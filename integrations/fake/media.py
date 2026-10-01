@@ -4,7 +4,10 @@ Renders a real (tiny) test-pattern MP4 with ffmpeg so downstream code — storag
 probing, technical QA, review — runs against genuine media without paid calls.
 """
 
+import os
+import shutil
 import subprocess
+import tempfile
 from decimal import Decimal
 from pathlib import Path
 
@@ -28,8 +31,27 @@ def render_test_video(
     duration_seconds: float = 2.0,
     with_audio: bool = True,
 ) -> None:
-    """Write a small synthetic H.264 MP4 (test pattern, optional sine tone)."""
+    """Write a small synthetic H.264 MP4 (test pattern, optional sine tone).
+
+    Renders are deterministic, so identical requests are served from a cache in
+    the system temp directory instead of re-encoding."""
     destination.parent.mkdir(parents=True, exist_ok=True)
+    cached = (
+        Path(tempfile.gettempdir())
+        / "hatch-fake-media"
+        / f"{width}x{height}-{duration_seconds}-{'a' if with_audio else 'n'}.mp4"
+    )
+    if not cached.exists():
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        partial = cached.with_suffix(f".{os.getpid()}.tmp.mp4")
+        _encode(partial, width, height, duration_seconds, with_audio)
+        partial.replace(cached)
+    shutil.copyfile(cached, destination)
+
+
+def _encode(
+    destination: Path, width: int, height: int, duration_seconds: float, with_audio: bool
+) -> None:
     command = ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i",
                f"testsrc2=size={width}x{height}:rate=12:duration={duration_seconds}"]  # fmt: skip
     if with_audio:

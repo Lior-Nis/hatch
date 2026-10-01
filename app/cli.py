@@ -1,6 +1,7 @@
 """Hatch command-line interface."""
 
 import uuid
+from dataclasses import replace
 from typing import NoReturn
 
 import typer
@@ -11,6 +12,7 @@ from app.bootstrap import (
     ConfigurationError,
     build_asset_store,
     build_production_deps,
+    build_qa_gates,
     open_session,
 )
 from app.config import Settings, get_settings
@@ -18,8 +20,10 @@ from app.experiments.fixtures import FIRST_SHORT
 from app.experiments.lineage import ExperimentNotFound, get_lineage
 from app.experiments.models import Experiment
 from app.experiments.service import create_experiment
+from app.experiments.states import VideoStatus
 from app.production.models import Asset
 from app.production.run import ProductionDeps, ProductionResult, produce_short
+from app.quality.runner import run_quality_gates
 
 app = typer.Typer(help="Hatch — evolutionary kids' media studio.", no_args_is_help=True)
 
@@ -102,6 +106,15 @@ def _produce(
         result = produce_short(session, experiment_id, deps)
     except ValueError as exc:
         _fail(str(exc))
+    if result.video_status is VideoStatus.GENERATED:
+        report = run_quality_gates(
+            session, experiment_id, gates=build_qa_gates(settings), store=deps.store
+        )
+        for verdict in report.verdicts:
+            typer.echo(f"qa {verdict.gate}: {verdict.outcome.value}")
+            for reason in verdict.reasons:
+                typer.echo(f"  - {reason}")
+        result = replace(result, video_status=report.video_status)
     _report(session, settings, result)
 
 

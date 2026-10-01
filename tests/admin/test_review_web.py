@@ -11,7 +11,7 @@ from app.experiments.models import Experiment
 from app.experiments.states import VideoStatus
 from app.quality.models import HumanReview, ReviewDecision
 from integrations.object_storage.local import LocalAssetStore
-from tests.factories import make_generated_experiment
+from tests.factories import make_reviewable_experiment
 
 
 @pytest.fixture
@@ -31,7 +31,7 @@ def client(session: Session, store: LocalAssetStore) -> Iterator[TestClient]:
 
 @pytest.fixture
 def experiment(session: Session, tmp_path: Path, store: LocalAssetStore) -> Experiment:
-    return make_generated_experiment(session, tmp_path, store=store)
+    return make_reviewable_experiment(session, tmp_path, store=store)
 
 
 def test_queue_lists_the_generated_short_awaiting_review(
@@ -93,7 +93,7 @@ def test_rejecting_without_a_reason_shows_an_error_and_changes_nothing(
     assert response.status_code == 422
     assert "reason is required" in response.text
     assert session.scalars(select(HumanReview)).all() == []
-    assert session.get_one(Experiment, experiment.id).video_status is VideoStatus.GENERATED
+    assert session.get_one(Experiment, experiment.id).video_status is VideoStatus.APPROVAL_PENDING
 
 
 def test_decided_reviews_are_shown_as_an_audit_trail(
