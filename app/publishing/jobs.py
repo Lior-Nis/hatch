@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.analytics.jobs import schedule_observations
 from app.db import utcnow
 from app.experiments.models import Experiment
 from app.experiments.states import VideoStatus
@@ -136,6 +137,10 @@ def publishing_handlers(
         if job.experiment_id is None:
             raise PermanentJobError("refresh_publications job has no experiment")
         publications = refresh_publications(session, job.experiment_id, publisher=publisher)
+        for publication in publications:
+            if publication.status is PublicationRecordStatus.PUBLISHED:
+                # Start measuring: one observation per maturity window.
+                schedule_observations(session, publication, now=job.started_at)
         if any(p.status is PublicationRecordStatus.SCHEDULED for p in publications):
             raise RetryLater(poll_interval, "waiting for platforms to publish")
         return {"publications": {p.platform.value: p.status.value for p in publications}}

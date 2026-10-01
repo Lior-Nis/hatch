@@ -13,6 +13,12 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 from app.platforms import Platform
 
 
+class AnalyticsError(Exception):
+    def __init__(self, message: str, *, retryable: bool = True) -> None:
+        self.retryable = retryable
+        super().__init__(message)
+
+
 class NormalizedMetrics(BaseModel):
     """Comparable signals across platforms. ``None`` means the platform did not
     report the signal — never treat it as zero."""
@@ -20,6 +26,8 @@ class NormalizedMetrics(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     views: int | None = None
+    reach: int | None = None
+    """Unique accounts that saw the video."""
     impressions: int | None = None
     average_watch_seconds: float | None = None
     average_watch_fraction: float | None = None
@@ -45,8 +53,17 @@ class AnalyticsAdapter(Protocol):
     @property
     def platform(self) -> Platform: ...
 
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def version(self) -> str:
+        """Changes whenever the raw-to-normalized mapping changes, so old
+        snapshots can be told apart and re-derived from their raw payload."""
+        ...
+
     def fetch_post_metrics(
         self, *, platform_account_id: str, platform_post_id: str
     ) -> MetricObservation:
-        """Current cumulative metrics for one post."""
+        """Current cumulative metrics for one post. Raises ``AnalyticsError``."""
         ...

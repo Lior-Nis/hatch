@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base, Evidence, Identified, JSONDict
@@ -14,6 +14,10 @@ class MetricSnapshot(Evidence, Identified, Base):
     never rewritten; later observations are new rows."""
 
     __tablename__ = "metric_snapshots"
+    __table_args__ = (
+        Index("ix_metric_snapshots_raw", "raw", postgresql_using="gin"),
+        Index("ix_metric_snapshots_normalized", "normalized", postgresql_using="gin"),
+    )
 
     publication_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("publications.id"), index=True)
     observed_at: Mapped[datetime]
@@ -26,3 +30,16 @@ class MetricSnapshot(Evidence, Identified, Base):
     normalized: Mapped[JSONDict]
 
     publication: Mapped[Publication] = relationship(back_populates="metric_snapshots")
+
+
+class MetricIngestionFailure(Evidence, Identified, Base):
+    """An observation that could not be collected. Recorded explicitly so a
+    missing snapshot is never mistaken for "nothing happened"."""
+
+    __tablename__ = "metric_ingestion_failures"
+
+    publication_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("publications.id"), index=True)
+    checkpoint: Mapped[str | None] = mapped_column(String(20))
+    error: Mapped[str] = mapped_column(Text)
+
+    publication: Mapped[Publication] = relationship()

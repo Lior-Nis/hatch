@@ -77,7 +77,9 @@ def status_of(session: Session, job: JobRun) -> JobStatus:
 
 
 def drain(job_worker: Worker) -> None:
-    for _ in range(20):
+    """Run publishing jobs until none is due (other job types are not this
+    worker's concern in these tests)."""
+    for _ in range(40):
         if not job_worker.run_once():
             return
     raise AssertionError("queue did not drain")
@@ -169,6 +171,8 @@ def test_publish_job_schedules_all_four_platforms_then_tracks_them(
     session.expire_all()
     assert session.get_one(Experiment, experiment.id).video_status is VideoStatus.PUBLISHED
     assert status_of(session, refresh) is JobStatus.SUCCEEDED
+    observations = session.scalars(select(JobRun).where(JobRun.job_type == "ingest_metrics")).all()
+    assert len(observations) == 4 * 6  # four platforms, six maturity windows each
     assert all(
         p.status is PublicationRecordStatus.PUBLISHED and p.platform_post_id
         for p in session.scalars(select(Publication))

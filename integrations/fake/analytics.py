@@ -17,6 +17,9 @@ def _as_float(value: JsonValue) -> float | None:
 
 
 class FakeAnalyticsAdapter:
+    name = "fake"
+    version = "fake-1"
+
     def __init__(self, *, platform: Platform, payloads: dict[str, dict[str, JsonValue]]) -> None:
         self.platform = platform
         self._payloads = payloads
