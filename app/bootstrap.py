@@ -107,15 +107,15 @@ def build_media_generator(settings: Settings) -> MediaGenerator:
     if settings.media_provider == "fake":
         # Synthetic media is free, so it must not eat into the real budget.
         return FakeMediaGenerator(cost_per_second_usd=Decimal("0"))
-    if settings.higgsfield_api_key is None or settings.higgsfield_api_secret is None:
+    credentials = settings.higgsfield_credentials()
+    if credentials is None:
         raise ConfigurationError(
-            "Higgsfield credentials are missing: set HATCH_HIGGSFIELD_API_KEY and "
-            "HATCH_HIGGSFIELD_API_SECRET in .env, or use HATCH_MEDIA_PROVIDER=fake."
+            "Higgsfield credentials are missing: set HF_KEY=<key id>:<key secret> in "
+            ".env.local (or HATCH_HIGGSFIELD_API_KEY and HATCH_HIGGSFIELD_API_SECRET), "
+            "or use HATCH_MEDIA_PROVIDER=fake."
         )
-    return HiggsfieldMediaGenerator(
-        api_key=settings.higgsfield_api_key.get_secret_value(),
-        api_secret=settings.higgsfield_api_secret.get_secret_value(),
-    )
+    api_key, api_secret = credentials
+    return HiggsfieldMediaGenerator(api_key=api_key, api_secret=api_secret)
 
 
 def build_publisher(settings: Settings) -> Publisher:

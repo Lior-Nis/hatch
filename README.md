@@ -53,6 +53,10 @@ Higgsfield SDK example (one billable Seedance 2.5 clip, outside Hatch's budget g
     # .env.local (git-ignored): HF_KEY=<key id>:<key secret>
     uv run python -m examples.seedance_2_5.main          # prints the video URL, or why there is none
 
+Hatch itself reads `.env` and then `.env.local`, so the same `HF_KEY` line also
+configures the Higgsfield adapter (explicit `HATCH_HIGGSFIELD_API_KEY` and
+`HATCH_HIGGSFIELD_API_SECRET` take priority). Tests never read either file.
+
 Operations:
 
     uv run hatch trace <experiment_id>                   # everything that happened, in order

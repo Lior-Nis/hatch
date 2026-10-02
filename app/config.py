@@ -11,17 +11,23 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+ENV_FILES = (".env", ".env.local")
+"""Read in order; a later file overrides an earlier one, and real environment
+variables override both. Both files are git-ignored."""
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="HATCH_",
-        env_file=".env",
+        env_file=ENV_FILES,
         env_file_encoding="utf-8",
         extra="ignore",
         frozen=True,
+        # Settings hold secrets: a validation error must never echo a value.
+        hide_input_in_errors=True,
     )
 
     env: str = "development"
@@ -46,6 +52,11 @@ class Settings(BaseSettings):
     media_provider: Literal["higgsfield", "fake"] = "higgsfield"
     higgsfield_api_key: SecretStr | None = None
     higgsfield_api_secret: SecretStr | None = None
+    higgsfield_key: SecretStr | None = Field(
+        default=None, validation_alias=AliasChoices("HATCH_HIGGSFIELD_KEY", "HF_KEY")
+    )
+    """Both parts in one value, "<key id>:<key secret>": the official SDK's
+    HF_KEY. Used when the two separate settings above are not set."""
     # Model routing. The router picks the video model per candidate from the
     # provider_models catalogue; set an override to force one model.
     video_model_override: str | None = None
@@ -100,6 +111,27 @@ class Settings(BaseSettings):
     budget_max_per_generation_usd: Decimal = Decimal("0.75")
     budget_daily_usd: Decimal = Decimal("15.00")
     budget_monthly_usd: Decimal = Decimal("500.00")
+
+    @field_validator("higgsfield_key")
+    @classmethod
+    def _higgsfield_key_has_both_parts(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None:
+            key_id, _, secret = value.get_secret_value().partition(":")
+            if not key_id or not secret:
+                raise ValueError("HF_KEY must be '<key id>:<key secret>'")
+        return value
+
+    def higgsfield_credentials(self) -> tuple[str, str] | None:
+        """(key id, key secret), or None when Higgsfield is not configured."""
+        if self.higgsfield_api_key is not None and self.higgsfield_api_secret is not None:
+            return (
+                self.higgsfield_api_key.get_secret_value(),
+                self.higgsfield_api_secret.get_secret_value(),
+            )
+        if self.higgsfield_key is not None:
+            key_id, _, secret = self.higgsfield_key.get_secret_value().partition(":")
+            return key_id, secret
+        return None
 
 
 @lru_cache

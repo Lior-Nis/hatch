@@ -9,9 +9,25 @@ from sqlalchemy import Connection, Engine, create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
+from app.config import Settings, get_settings
 from app.db import Base, alembic_config, registry
 
 assert registry
+
+_SDK_CREDENTIAL_VARIABLES = ("HF_KEY", "HF_API_KEY", "HF_API_SECRET")
+
+
+@pytest.fixture(autouse=True)
+def isolate_from_env_files(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Tests never read the developer's .env / .env.local or SDK credentials:
+    a real key there must not leak into a test, let alone pay for a call."""
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+    for name in _SDK_CREDENTIAL_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
 
 TEST_DATABASE_URL = os.environ.get(
     "HATCH_TEST_DATABASE_URL", "postgresql+psycopg://hatch:hatch@localhost:54329/hatch_test"
