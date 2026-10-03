@@ -1,0 +1,51 @@
+# Single-host deployment: database, dashboard and background worker.
+# Secrets live in .env next to this file (never committed). See docs/deploy.md.
+name: hatch
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hatch
+      POSTGRES_DB: hatch
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hatch -d hatch"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  web:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HATCH_DATABASE_URL: postgresql+psycopg://hatch:${POSTGRES_PASSWORD}@db:5432/hatch
+      HATCH_ASSET_DIR: /srv/hatch/var/assets
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8321:8321" # reachable only through the reverse proxy
+    volumes:
+      - assets:/srv/hatch/var/assets
+
+  worker:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HATCH_DATABASE_URL: postgresql+psycopg://hatch:${POSTGRES_PASSWORD}@db:5432/hatch
+      HATCH_ASSET_DIR: /srv/hatch/var/assets
+    command: ["hatch", "worker"]
+    depends_on:
+      web: # web applies migrations first
+        condition: service_started
+    volumes:
+      - assets:/srv/hatch/var/assets
+
+volumes:
+  pgdata:
+  assets:
