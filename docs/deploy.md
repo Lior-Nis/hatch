@@ -8,7 +8,7 @@ Hatch runs as three containers: Postgres, the dashboard (`web`) and the backgrou
     docker compose -f docker-compose.prod.yml exec web hatch seed-ips
     docker compose -f docker-compose.prod.yml exec web hatch seed-models
 
-The dashboard has no login of its own and can approve videos. It listens on 127.0.0.1:8321
+The dashboard has no login of its own and can approve videos. It listens on 127.0.0.1:18321
 only. Put it behind a reverse proxy that enforces authentication, and use HTTPS when a domain exists.
 
 Keys go in the server's `.env`, never in the repository or in chat:

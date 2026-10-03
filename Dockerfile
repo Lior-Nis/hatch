@@ -17,7 +17,7 @@ COPY migrations migrations
 COPY alembic.ini ./
 RUN uv sync --frozen --no-dev
 
-RUN useradd --create-home hatch && mkdir -p var && chown -R hatch var
+RUN useradd --create-home hatch && mkdir -p var/assets && chown -R hatch var
 USER hatch
 EXPOSE 8321
 # Apply migrations, then serve. The worker overrides the command.
