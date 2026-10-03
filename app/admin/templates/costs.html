@@ -2,7 +2,7 @@
 {% block title %}Costs · Hatch{% endblock %}
 {% macro money(value) %}{% if value is none %}—{% else %}${{ "%.2f" | format(value) }}{% endif %}{% endmacro %}
 {% block content %}
-<h1>Costs <span class="muted">(last 30 days)</span></h1>
+<h1>Spend</h1>
 <div class="cards">
   <div class="card"><div class="muted">Remaining today</div><div class="big">{{ money(budget.remaining_today) }}</div>
     <div class="muted">{{ money(budget.spent_24h) }} of {{ money(budget.daily_limit) }} used in 24h</div></div>
@@ -20,17 +20,4 @@
 <table>{% for slug, amount in report.by_ip.items() %}<tr><td><a href="/ips/{{ slug }}">{{ slug }}</a></td><td class="num">{{ money(amount) }}</td></tr>{% endfor %}</table>
 <h2>By provider</h2>
 <table>{% for provider, amount in report.by_provider.items() %}<tr><td>{{ provider }}</td><td class="num">{{ money(amount) }}</td></tr>{% endfor %}</table>
-<h2>By day (UTC)</h2>
-<table>{% for day, amount in report.by_day.items() %}<tr><td>{{ day }}</td><td class="num">{{ money(amount) }}</td></tr>{% endfor %}</table>
-
-<h2>Provider reliability</h2>
-<table>
-  <tr><th>Provider / model</th><th class="num">OK</th><th class="num">Failed</th><th class="num">Failure rate</th><th class="num">Budget blocks</th><th>Last error</th></tr>
-  {% for provider in providers %}
-  <tr><td>{{ provider.provider }}<br><code>{{ provider.model }}</code></td><td class="num">{{ provider.succeeded }}</td>
-    <td class="num">{{ provider.failed }}</td>
-    <td class="num">{% if provider.failure_rate is not none %}{{ "%.0f" | format(provider.failure_rate * 100) }}%{% else %}—{% endif %}</td>
-    <td class="num">{{ provider.blocked_by_budget }}</td><td class="muted">{{ provider.last_error or "" }}</td></tr>
-  {% endfor %}
-</table>
 {% endblock %}

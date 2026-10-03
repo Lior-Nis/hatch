@@ -1,60 +1,19 @@
 {% extends "base.html" %}
-{% block title %}Portfolio · Hatch{% endblock %}
+{% block title %}IPs · Hatch{% endblock %}
 {% block content %}
-<h1>Portfolio</h1>
-<div class="cards">
-  <div class="card">
-    <div class="muted">Spend, last 24h</div>
-    <div class="big">${{ "%.2f" | format(budget.spent_24h) }}</div>
-    <div class="muted">of ${{ "%.2f" | format(budget.daily_limit) }} daily ceiling</div>
-  </div>
-  <div class="card">
-    <div class="muted">Spend, last 30 days</div>
-    <div class="big">${{ "%.2f" | format(budget.spent_30d) }}</div>
-    <div class="muted">of ${{ "%.2f" | format(budget.monthly_limit) }} ceiling</div>
-  </div>
-  <div class="card">
-    <div class="muted">Human review</div>
-    <div class="big"><a href="/review">{{ awaiting_review }} awaiting review</a></div>
-  </div>
-  <div class="card">
-    <div class="muted">Jobs</div>
-    <div class="big">{{ jobs.running }} running, {{ jobs.queued }} queued</div>
-    <div class="{{ 'bad' if jobs.failed else 'muted' }}"><a href="/queue">{{ jobs.failed }} failed</a>
-      {% if stalls %}· <span class="bad">{{ stalls | length }} stalled</span>{% endif %}</div>
-  </div>
-</div>
-
-<h2>IPs</h2>
-<table>
-  <tr><th>IP</th><th>Status</th><th class="num">IP fitness</th><th class="num">Experiments</th>
-    <th class="num">In pipeline</th><th class="num">Awaiting review</th><th class="num">Live</th>
-    <th class="num">Replicated</th><th class="num">Spend 30d</th><th>Latest decision</th></tr>
+<h1>IPs</h1>
+<div class="feed" style="gap:12px">
   {% for row in ips %}
-  <tr>
-    <td><a href="/ips/{{ row.ip.slug }}">{{ row.ip.name }}</a><br><span class="muted">{{ row.ip.category }}</span></td>
-    <td><span class="tag">{{ row.ip.status.value }}</span></td>
-    <td class="num">{% if row.score is not none %}{{ "%.2f" | format(row.score) }}{% if not row.sufficient %} <span class="muted">(thin evidence)</span>{% endif %}{% else %}—{% endif %}</td>
-    <td class="num">{{ row.experiments }}</td>
-    <td class="num">{{ row.in_pipeline }}</td>
-    <td class="num">{{ row.awaiting_review }}</td>
-    <td class="num">{{ row.live }}</td>
-    <td class="num">{{ row.supported }}</td>
-    <td class="num">${{ "%.2f" | format(row.spend_30d) }}</td>
-    <td>{% if row.last_decision %}<span class="muted">{{ row.last_decision.decision_type.value }}:</span> {{ row.last_decision.reason }}{% else %}—{% endif %}</td>
-  </tr>
+  <a class="card" href="/ips/{{ row.ip.slug }}" style="color:inherit">
+    <div style="display:flex;justify-content:space-between;gap:8px"><b>{{ row.ip.name }}</b><span class="tag">{{ row.ip.status.value }}</span></div>
+    <div class="muted small">{{ row.ip.category }}</div>
+    <p class="small" style="margin:8px 0 0">
+      {{ row.experiments }} videos · {{ row.live }} live · {{ row.supported }} replicated
+      · fitness {% if row.score is not none %}{{ "%.2f" | format(row.score) }}{% if not row.sufficient %} <span class="muted">(thin evidence)</span>{% endif %}{% else %}—{% endif %}
+      · ${{ "%.2f" | format(row.spend_30d) }} / 30d</p>
+    {% if row.last_decision %}<p class="muted small" style="margin:6px 0 0">{{ row.last_decision.decision_type.value }}: {{ row.last_decision.reason }}</p>{% endif %}
+  </a>
   {% endfor %}
-</table>
+</div>
 {% if not ips %}<p class="muted">No IPs yet. Run <code>hatch seed-ips</code>.</p>{% endif %}
-
-{% if stalls %}
-<h2 class="bad">Stalled</h2>
-<table>
-  {% for stall in stalls %}
-  <tr><td>{{ stall.kind }}</td><td>{{ stall.detail }}</td>
-    <td class="muted">since {{ stall.since.strftime("%Y-%m-%d %H:%M") }} UTC</td>
-    <td>{% if stall.experiment_id %}<a href="/experiments/{{ stall.experiment_id }}">experiment</a>{% endif %}</td></tr>
-  {% endfor %}
-</table>
-{% endif %}
 {% endblock %}

@@ -26,6 +26,7 @@ from app.fitness.models import FitnessScope, FitnessSnapshot
 from app.ips.models import IP
 from app.knowledge.models import KnowledgeSummary
 from app.observability.health import ProviderHealth, Stall, find_stalls, provider_health
+from app.production.models import AssetKind
 from app.scheduling.models import JobRun, JobStatus
 
 _IN_PIPELINE = (
@@ -112,6 +113,23 @@ def portfolio(
         "stalls": find_stalls(session, now=now),
         "awaiting_review": sum(row["awaiting_review"] for row in rows),
     }
+
+
+def videos(session: Session, limit: int = 40) -> list[dict[str, Any]]:
+    """The newest experiments, each with its final video when one exists."""
+    rows = []
+    for experiment in session.scalars(
+        select(Experiment).order_by(Experiment.created_at.desc(), Experiment.id).limit(limit)
+    ):
+        finals = [a for a in experiment.assets if a.kind is AssetKind.FINAL_VIDEO]
+        rows.append(
+            {
+                "experiment": experiment,
+                "ip": experiment.ip,
+                "asset": finals[-1] if finals else None,
+            }
+        )
+    return rows
 
 
 def _experiment_rows(session: Session, experiments: list[Experiment]) -> list[dict[str, Any]]:

@@ -110,7 +110,14 @@ def create_app() -> FastAPI:
         return BudgetLimits.from_settings(get_settings())
 
     @app.get("/", response_class=HTMLResponse)
-    def dashboard(request: Request, session: SessionDep) -> HTMLResponse:
+    def home(request: Request, session: SessionDep) -> HTMLResponse:
+        context = views.portfolio(session, limits())
+        return templates.TemplateResponse(
+            request, "videos.html", {**context, "videos": views.videos(session)}
+        )
+
+    @app.get("/ips", response_class=HTMLResponse)
+    def ips_page(request: Request, session: SessionDep) -> HTMLResponse:
         return templates.TemplateResponse(
             request, "dashboard.html", views.portfolio(session, limits())
         )

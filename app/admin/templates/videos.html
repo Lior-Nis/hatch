@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Videos · Hatch{% endblock %}
+{% block content %}
+<p class="strip">
+  <span><b>${{ "%.2f" | format(budget.spent_24h) }}</b> <span class="muted">of ${{ "%.2f" | format(budget.daily_limit) }} today</span></span>
+  <a href="/review">{{ awaiting_review }} awaiting review</a>
+  <a href="/queue" class="{{ 'bad' if jobs.failed or stalls }}">{{ jobs.failed }} failed{% if stalls %} · {{ stalls | length }} stalled{% endif %}</a>
+</p>
+<div class="feed">
+  {% for item in videos %}
+  <article class="post">
+    {% if item.asset %}
+    <video controls playsinline preload="metadata" src="/assets/{{ item.asset.id }}/content"></video>
+    {% else %}
+    <div class="novideo">No video yet · {{ item.experiment.video_status.value }}</div>
+    {% endif %}
+    <div class="meta">
+      <a href="/experiments/{{ item.experiment.id }}"><b>{{ item.ip.name }}</b></a>
+      <span class="tag">{{ item.experiment.video_status.value }}</span>
+    </div>
+    <p class="small">{{ item.experiment.hypothesis.statement }}</p>
+    <p class="muted small">{{ item.experiment.created_at.strftime("%b %d, %H:%M") }} UTC</p>
+  </article>
+  {% endfor %}
+</div>
+{% if not videos %}<p class="muted">No videos yet. Run <code>hatch run-fixture</code> or start a worker.</p>{% endif %}
+{% endblock %}

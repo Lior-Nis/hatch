@@ -63,17 +63,39 @@ def world(session: Session, tmp_path: Path) -> dict[str, Experiment]:
     return {"winner": winner, "weak": weak, "waiting": waiting, "descendant": descendants[0]}
 
 
-def test_portfolio_shows_what_is_winning_waiting_and_costing(
+def test_home_is_a_feed_of_the_generated_videos_with_the_numbers_that_matter(
     client: TestClient, world: dict[str, Experiment]
 ) -> None:
     page = client.get("/").text
 
-    assert "Nibbin Hollow" in page and "Sock-Planet" in page
-    assert "validated" in page  # the IP with a replicated winner
+    waiting = world["waiting"]
+    final = next(a for a in waiting.assets if a.kind.value == "final_video")
+    asset_url = f"/assets/{final.id}/content"
+    assert f'src="{asset_url}"' in page  # the actual video, playable in the page
+    assert waiting.hypothesis.statement in page
+    assert f'href="/experiments/{waiting.id}"' in page
     assert "1 awaiting review" in page
     assert "1 failed" in page  # jobs needing attention
-    assert "$15.00" in page and "$500.00" in page  # the ceilings spend is measured against
+    assert "$15.00" in page  # spend measured against the daily ceiling
+
+
+def test_ips_page_shows_what_is_winning(client: TestClient, world: dict[str, Experiment]) -> None:
+    page = client.get("/ips").text
+
+    assert "Nibbin Hollow" in page and "Sock-Planet" in page
+    assert "validated" in page  # the IP with a replicated winner
     assert 'href="/ips/nibbin-hollow"' in page
+
+
+def test_videos_are_listed_newest_first_and_only_those_with_a_video_are_playable(
+    client: TestClient, world: dict[str, Experiment]
+) -> None:
+    page = client.get("/").text
+
+    assert page.index(str(world["waiting"].id)) < page.index(str(world["winner"].id))
+    assert page.count("<video") == sum(
+        1 for e in world.values() if any(a.kind.value == "final_video" for a in e.assets)
+    )
 
 
 def test_ip_page_explains_status_fitness_experiments_and_knowledge(
@@ -144,8 +166,13 @@ def test_unknown_ip_or_experiment_is_a_404(client: TestClient) -> None:
     assert client.get("/experiments/00000000-0000-0000-0000-000000000000").status_code == 404
 
 
-def test_every_page_links_to_the_others(client: TestClient, world: dict[str, Experiment]) -> None:
-    page = client.get("/").text
+@pytest.mark.parametrize("path", ["/", "/review", "/ips", "/costs", "/decisions", "/queue"])
+def test_every_page_has_the_bottom_tab_bar(
+    client: TestClient, world: dict[str, Experiment], path: str
+) -> None:
+    page = client.get(path).text
 
-    for path in ("/review", "/queue", "/costs", "/decisions"):
-        assert f'href="{path}"' in page
+    assert '<nav class="tabs"' in page
+    for target in ("/", "/review", "/ips", "/costs", "/decisions"):
+        assert f'href="{target}"' in page
+    assert 'name="viewport"' in page
