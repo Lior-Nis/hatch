@@ -17,7 +17,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.admin import views
+from app.admin import display, views
 from app.bootstrap import build_asset_store
 from app.budgets.governor import BudgetLimits
 from app.config import get_settings
@@ -44,6 +44,11 @@ assert registry  # every ORM model must be registered before any session is used
 STAGE_A_VIDEOS = 100
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+templates.env.filters["status"] = display.status_tag
+templates.env.filters["status_label"] = display.status_label
+templates.env.filters["relation"] = display.relation_label
+templates.env.filters["when"] = display.when
+templates.env.globals["reject_reasons"] = display.REJECT_REASONS
 
 
 def get_session(request: Request) -> Iterator[Session]:
@@ -58,8 +63,15 @@ def get_asset_store() -> AssetStore:
     return build_asset_store(get_settings())
 
 
-def get_reviewer() -> str:
-    return get_settings().reviewer or getpass.getuser()
+def get_reviewer(request: Request) -> str:
+    """Who is acting. In production nginx authenticates each person and passes
+    the username in X-Remote-User (the app listens only on localhost, behind
+    it). Run locally without a proxy, it falls back to the configured name."""
+    return (
+        request.headers.get("x-remote-user", "").strip()
+        or get_settings().reviewer
+        or getpass.getuser()
+    )
 
 
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -139,6 +151,7 @@ def create_app() -> FastAPI:
             "experiment.html",
             {
                 "lineage": lineage,
+                "tree": views.family_tree(session, experiment_id),
                 "timeline": experiment_timeline(session, experiment_id),
                 **views.experiment_relations(session, experiment_id),
             },
@@ -232,8 +245,16 @@ def create_app() -> FastAPI:
         reviewer: ReviewerDep,
         decision: Annotated[ReviewDecision, Form()],
         reason: Annotated[str, Form()] = "",
+        reason_code: Annotated[str, Form()] = "",
     ) -> Response:
         lineage = _lineage_or_404(session, experiment_id)
+        if reason_code and reason_code not in display.REJECT_REASONS:
+            return _review_page(
+                request, lineage, error="Pick one of the listed reasons.", status_code=422
+            )
+        if reason_code:
+            label = display.REJECT_REASONS[reason_code]
+            reason = f"{label}: {reason.strip()}" if reason.strip() else label
         try:
             submit_review(
                 session, experiment_id, decision=decision, reason=reason, reviewer=reviewer
@@ -246,12 +267,20 @@ def create_app() -> FastAPI:
         except ReviewNotAllowed as exc:
             return _review_page(request, lineage, error=str(exc), status_code=409)
         session.commit()
+        flash = {
+            ReviewDecision.APPROVE: "approved",
+            ReviewDecision.REJECT: "rejected",
+            ReviewDecision.FLAG: "flagged",
+        }.get(decision, "")
         if decision is ReviewDecision.FLAG:
-            return RedirectResponse("/review", status_code=303)
-        # Straight on to the next video waiting, so a queue is worked in one pass.
-        waiting = [e for e in pending_reviews(session) if e.id != experiment_id]
-        target = f"/review/{waiting[0].id}" if waiting else "/review"
-        return RedirectResponse(target, status_code=303)
+            target = "/review"
+        else:
+            # Straight on to the next video waiting, so a queue is worked in one pass.
+            waiting = [e for e in pending_reviews(session) if e.id != experiment_id]
+            target = f"/review/{waiting[0].id}" if waiting else "/review"
+        response = RedirectResponse(target, status_code=303)
+        response.set_cookie("flash", flash, max_age=30, path="/", samesite="lax")
+        return response
 
     @app.post("/review/{experiment_id}/audit")
     def review_audit(

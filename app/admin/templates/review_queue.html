@@ -1,61 +1,41 @@
 {% extends "base.html" %}
-{% block title %}Human review · Hatch{% endblock %}
+{% block title %}Review · Hatch{% endblock %}
 {% block content %}
-<h1>Human review</h1>
-<p class="muted">Stage A: every video is approved by a person before it can be published.
-  {{ decided }} of the first {{ stage_a_target }} decided.</p>
+<h1>Review</h1>
+<p class="muted small">Every video needs a person's OK before it posts. {{ decided }} of the first {{ stage_a_target }} reviewed.</p>
+<progress value="{{ decided }}" max="{{ stage_a_target }}" style="width:100%"></progress>
 
-<h2>Awaiting a decision ({{ pending | length }})</h2>
-{% if pending %}
-<table>
-  <tr><th>IP</th><th>Hypothesis</th><th>Created</th><th></th></tr>
-  {% for experiment in pending %}
-  <tr>
-    <td>{{ experiment.ip.name }}</td>
-    <td>{{ experiment.hypothesis.statement }}
-      {% if experiment.id in escalated %}<span class="tag fail">QA escalated</span>{% endif %}
-      {% if experiment.id in flagged %}<span class="tag">flagged</span>{% endif %}</td>
-    <td class="muted">{{ experiment.created_at.strftime("%Y-%m-%d %H:%M") }} UTC</td>
-    <td><a href="/review/{{ experiment.id }}">Review</a></td>
-  </tr>
-  {% endfor %}
-</table>
+<h2>Waiting for you ({{ pending | length }})</h2>
+{% for experiment in pending %}
+<a class="card" href="/review/{{ experiment.id }}">
+  <div style="display:flex;justify-content:space-between;gap:8px"><b>{{ experiment.ip.name }}</b>
+    <span>{% if experiment.id in escalated %}<span class="tag fail">Safety unsure</span>{% endif %}
+      {% if experiment.id in flagged %}<span class="tag flag">Flagged</span>{% endif %}</span></div>
+  <div class="small" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ experiment.hypothesis.statement }}</div>
+  <div class="muted small">{{ experiment.created_at | when }}</div>
+</a>
 {% else %}
-<p class="muted">Nothing is waiting for review.</p>
-{% endif %}
+<p class="muted">All caught up.</p>
+{% endfor %}
 
-<h2>Rejected by automated QA <span class="muted">(audit a sample: were the gates right?)</span></h2>
-{% if rejected %}
-<table>
-  <tr><th>IP</th><th>Hypothesis</th><th>Created</th><th></th></tr>
+<details>
+  <summary>Check the safety checks ({{ rejected | length }}, optional)</summary>
+  <p class="muted small">Videos the automatic checks rejected. Tell us if they were right. They stay rejected either way.</p>
   {% for experiment in rejected %}
-  <tr>
-    <td>{{ experiment.ip.name }}</td>
-    <td>{{ experiment.hypothesis.statement }}</td>
-    <td class="muted">{{ experiment.created_at.strftime("%Y-%m-%d %H:%M") }} UTC</td>
-    <td><a href="/review/{{ experiment.id }}">Audit</a></td>
-  </tr>
-  {% endfor %}
-</table>
-{% else %}
-<p class="muted">No unaudited automated rejections.</p>
-{% endif %}
+  <a class="card" href="/review/{{ experiment.id }}">
+    <b>{{ experiment.ip.name }}</b>
+    <div class="small">{{ experiment.hypothesis.statement }}</div>
+    <div class="muted small">{{ experiment.created_at | when }}</div>
+  </a>
+  {% else %}<p class="muted small">Nothing to check.</p>{% endfor %}
+</details>
 
 <h2>Recent decisions</h2>
-{% if recent %}
-<table>
-  <tr><th>Decision</th><th>Reason</th><th>Reviewer</th><th>When</th><th></th></tr>
-  {% for review in recent %}
-  <tr>
-    <td><span class="tag {{ review.decision.value }}">{{ review.decision.value }}</span></td>
-    <td>{{ review.reason or "—" }}</td>
-    <td>{{ review.reviewer }}</td>
-    <td class="muted">{{ review.created_at.strftime("%Y-%m-%d %H:%M") }} UTC</td>
-    <td><a href="/review/{{ review.experiment_id }}">Open</a></td>
-  </tr>
-  {% endfor %}
-</table>
-{% else %}
-<p class="muted">No decisions yet.</p>
-{% endif %}
+{% for review in recent %}
+<a class="card" href="/review/{{ review.experiment_id }}">
+  <span class="tag {{ review.decision.value }}">{{ review.decision.value | replace("_", " ") }}</span>
+  <span class="small">{{ review.reason or "No reason given" }}</span>
+  <div class="muted small">{{ review.reviewer }} · {{ review.created_at | when }}</div>
+</a>
+{% else %}<p class="muted">None yet.</p>{% endfor %}
 {% endblock %}

@@ -1,21 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Decisions · Hatch{% endblock %}
 {% block content %}
-<h1>Decisions {% if ip %}<span class="muted">for {{ ip }} · <a href="/decisions">all</a></span>{% endif %}</h1>
-<p class="muted">Every selection, replication request, verdict, promotion, archive and resurrection, with the reason recorded at the time.</p>
-<table>
-  <tr><th>When (UTC)</th><th>Decision</th><th>IP</th><th>Reason</th><th>About</th><th>Policy</th></tr>
-  {% for decision in decisions %}
-  <tr>
-    <td class="muted">{{ decision.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
-    <td><span class="tag">{{ decision.decision_type.value }}</span>{% if decision.bucket %} <span class="tag">{{ decision.bucket.value }}</span>{% endif %}</td>
-    <td>{% if decision.ip %}<a href="/ips/{{ decision.ip.slug }}">{{ decision.ip.slug }}</a>{% endif %}</td>
-    <td>{{ decision.reason }}</td>
-    <td>{% if decision.subject_experiment_id %}<a href="/experiments/{{ decision.subject_experiment_id }}">subject</a>{% endif %}
-      {% if decision.resulting_experiment_id %}<a href="/experiments/{{ decision.resulting_experiment_id }}">result</a>{% endif %}</td>
-    <td class="muted">{{ decision.policy_version }}</td>
-  </tr>
-  {% endfor %}
-</table>
-{% if not decisions %}<p class="muted">No decisions yet.</p>{% endif %}
+<p class="strip"><b>Decisions</b> <a href="/queue">Jobs</a></p>
+{% if ip %}<p class="small muted">Only {{ ip }} · <a href="/decisions">show all</a></p>{% endif %}
+{% for decision in decisions %}
+<div class="card" style="margin-bottom:10px">
+  <div style="display:flex;justify-content:space-between;gap:8px">
+    <span><span class="tag">{{ decision.decision_type.value | replace("_", " ") }}</span>{% if decision.bucket %} <span class="tag">{{ decision.bucket.value }}</span>{% endif %}</span>
+    <span class="muted small">{{ decision.created_at | when }}</span></div>
+  <p class="small" style="margin:6px 0 0">{{ decision.reason }}</p>
+  <p class="small muted" style="margin:4px 0 0">
+    {% if decision.ip %}<a href="/ips/{{ decision.ip.slug }}">{{ decision.ip.slug }}</a>{% endif %}
+    {% if decision.subject_experiment_id %} · <a href="/experiments/{{ decision.subject_experiment_id }}">about</a>{% endif %}
+    {% if decision.resulting_experiment_id %} · <a href="/experiments/{{ decision.resulting_experiment_id }}">led to</a>{% endif %}</p>
+</div>
+{% else %}<p class="muted">Nothing decided yet.</p>{% endfor %}
 {% endblock %}

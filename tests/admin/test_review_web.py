@@ -142,7 +142,7 @@ def test_stage_a_queue_is_worked_through_one_video_after_another(
     statuses = [session.get_one(Experiment, e.id).video_status for e in (first, second, third)]
     assert statuses == [VideoStatus.READY, VideoStatus.HUMAN_REJECTED, VideoStatus.READY]
     queue = client.get("/review")
-    assert "Awaiting a decision (0)" in queue.text
+    assert "Waiting for you (0)" in queue.text
     assert "3 of the first 100" in queue.text
 
 
@@ -155,8 +155,8 @@ def test_flagging_from_the_page_keeps_the_video_in_the_queue_with_a_marker(
 
     assert response.status_code == 303
     queue = client.get("/review")
-    assert "Awaiting a decision (1)" in queue.text
-    assert "flagged" in queue.text
+    assert "Waiting for you (1)" in queue.text
+    assert "Flagged" in queue.text
     detail = client.get(f"/review/{experiment.id}")
     assert "Second look at audio." in detail.text
     assert 'value="flag"' in detail.text
@@ -175,7 +175,7 @@ def test_review_page_highlights_qa_escalations_and_needs_a_reason_to_approve(
     page = client.get(f"/review/{experiment.id}")
     refused = client.post(f"/review/{experiment.id}", data={"decision": "approve", "reason": ""})
 
-    assert "Needs your judgement" in page.text
+    assert "Safety check is unsure" in page.text
     assert "distorted face at 0:03" in page.text
     assert refused.status_code == 422
     assert "escalat" in refused.text
@@ -197,7 +197,7 @@ def test_an_automated_rejection_can_be_audited_from_the_ui(
         data={"verdict": "disagree", "reason": "It is only a soft shadow."},
     )
 
-    assert "Rejected by automated QA" in queue.text
+    assert "Check the safety checks" in queue.text
     assert f"/review/{experiment.id}" in queue.text
     assert "scary shadow" in detail.text
     assert 'name="verdict"' in detail.text and 'name="decision"' not in detail.text
@@ -221,3 +221,70 @@ def test_an_audit_needs_a_reason(
 
     assert response.status_code == 422
     assert session.scalars(select(HumanReview)).all() == []
+
+
+@pytest.fixture
+def real_login_client(session: Session, store: LocalAssetStore) -> Iterator[TestClient]:
+    """No reviewer override: the identity comes from the proxy's login header."""
+    app = create_app()
+    app.dependency_overrides[get_session] = lambda: session
+    app.dependency_overrides[get_asset_store] = lambda: store
+    with TestClient(app, follow_redirects=False) as client:
+        yield client
+
+
+def test_the_reviewer_is_the_person_who_logged_in_at_the_proxy(
+    real_login_client: TestClient, session: Session, experiment: Experiment
+) -> None:
+    real_login_client.post(
+        f"/review/{experiment.id}",
+        data={"decision": "approve", "reason": ""},
+        headers={"X-Remote-User": "koren"},
+    )
+
+    review = session.scalars(select(HumanReview)).one()
+    assert review.reviewer == "koren"
+
+
+def test_a_quick_reason_is_enough_to_reject(
+    client: TestClient, session: Session, experiment: Experiment
+) -> None:
+    response = client.post(
+        f"/review/{experiment.id}", data={"decision": "reject", "reason_code": "scary"}
+    )
+
+    assert response.status_code == 303
+    assert session.scalars(select(HumanReview)).one().reason == "Scary or unsafe"
+
+
+def test_a_quick_reason_and_a_note_are_stored_together(
+    client: TestClient, session: Session, experiment: Experiment
+) -> None:
+    client.post(
+        f"/review/{experiment.id}",
+        data={"decision": "reject", "reason_code": "quality", "reason": "Blurry at the end."},
+    )
+
+    assert session.scalars(select(HumanReview)).one().reason == "Poor quality: Blurry at the end."
+
+
+def test_an_unknown_quick_reason_is_refused(client: TestClient, experiment: Experiment) -> None:
+    response = client.post(
+        f"/review/{experiment.id}", data={"decision": "reject", "reason_code": "bogus"}
+    )
+
+    assert response.status_code == 422
+
+
+def test_the_review_page_leads_with_the_decision_in_plain_words(
+    client: TestClient, experiment: Experiment
+) -> None:
+    page = client.get(f"/review/{experiment.id}").text
+
+    assert 'class="decide"' in page  # the fixed bottom panel
+    for label in ("Scary or unsafe", "Copies another character or brand", "Poor quality"):
+        assert label in page
+    assert "Doesn&#39;t make sense" in page or "Doesn't make sense" in page
+    assert "approval_pending" not in page.replace('title="approval_pending"', "")
+    assert "Needs your OK" in page
+    assert "<details" in page  # the engineering detail is collapsed

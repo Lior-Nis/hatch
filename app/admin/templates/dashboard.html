@@ -5,12 +5,11 @@
 <div class="feed" style="gap:12px">
   {% for row in ips %}
   <a class="card" href="/ips/{{ row.ip.slug }}" style="color:inherit">
-    <div style="display:flex;justify-content:space-between;gap:8px"><b>{{ row.ip.name }}</b><span class="tag">{{ row.ip.status.value }}</span></div>
+    <div style="display:flex;justify-content:space-between;gap:8px"><b>{{ row.ip.name }}</b>{{ row.ip.status | status }}</div>
     <div class="muted small">{{ row.ip.category }}</div>
     <p class="small" style="margin:8px 0 0">
-      {{ row.experiments }} videos · {{ row.live }} live · {{ row.supported }} replicated
-      · fitness {% if row.score is not none %}{{ "%.2f" | format(row.score) }}{% if not row.sufficient %} <span class="muted">(thin evidence)</span>{% endif %}{% else %}—{% endif %}
-      · ${{ "%.2f" | format(row.spend_30d) }} / 30d</p>
+      {{ row.experiments }} videos · {{ row.live }} posted · ${{ "%.2f" | format(row.spend_30d) }} in 30 days
+      {% if row.score is not none %}· score {{ "%.2f" | format(row.score) }}{% if not row.sufficient %} <span class="muted">(too early)</span>{% endif %}{% endif %}</p>
     {% if row.last_decision %}<p class="muted small" style="margin:6px 0 0">{{ row.last_decision.decision_type.value }}: {{ row.last_decision.reason }}</p>{% endif %}
   </a>
   {% endfor %}

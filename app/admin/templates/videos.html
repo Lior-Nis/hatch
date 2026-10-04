@@ -1,27 +1,51 @@
 {% extends "base.html" %}
 {% block title %}Videos · Hatch{% endblock %}
+{% macro post(item) %}
+<article class="post">
+  {% if item.asset %}
+  <video controls playsinline preload="metadata" aria-label="Video from {{ item.ip.name }}" src="/assets/{{ item.asset.id }}/content"></video>
+  {% else %}
+  <div class="novideo">{{ item.experiment.video_status | status_label }}…</div>
+  {% endif %}
+  <div class="meta">
+    <a href="/experiments/{{ item.experiment.id }}"><b>{{ item.ip.name }}</b></a>
+    {{ item.experiment.video_status | status }}
+  </div>
+  <p class="small">{{ item.experiment.hypothesis.statement }}</p>
+  <div class="chips">
+    {% for p in item.posts %}
+    <span class="chip {{ 'on' if p.status.value == 'published' }}">{{ p.platform.value | replace("_", " ") | title }} ·
+      {% if p.published_at %}{{ p.published_at | when }}{% else %}{{ p.status | status_label }}{% endif %}</span>
+    {% else %}
+    <span class="chip">Not posted yet</span>
+    {% endfor %}
+    <span class="chip">{{ item.experiment.created_at | when }}</span>
+  </div>
+</article>
+{% endmacro %}
 {% block content %}
 <p class="strip">
-  <span><b>${{ "%.2f" | format(budget.spent_24h) }}</b> <span class="muted">of ${{ "%.2f" | format(budget.daily_limit) }} today</span></span>
-  <a href="/review">{{ awaiting_review }} awaiting review</a>
-  <a href="/queue" class="{{ 'bad' if jobs.failed or stalls }}">{{ jobs.failed }} failed{% if stalls %} · {{ stalls | length }} stalled{% endif %}</a>
+  <span>${{ "%.2f" | format(budget.spent_24h) }} <span class="muted">of ${{ "%.2f" | format(budget.daily_limit) }} today</span></span>
+  <a href="/queue" class="{{ 'bad' if jobs.failed or stalls }}">{{ jobs.failed }} failed{% if stalls %} · {{ stalls | length }} stuck{% endif %}</a>
 </p>
+
+{% set waiting = videos | selectattr("needs_ok") | list %}
+{% if waiting %}
+<section class="needs">
+  <h2>Needs you · {{ awaiting_review }} awaiting review</h2>
+  <div class="feed">
+    {% for item in waiting %}{{ post(item) }}
+    <a class="card" href="/review/{{ item.experiment.id }}" style="text-align:center;font-weight:600">Review this video</a>
+    {% endfor %}
+  </div>
+</section>
+{% else %}
+<p class="strip"><a href="/review">0 awaiting review</a> <span class="muted">· nothing needs you</span></p>
+{% endif %}
+
+<h2>All videos</h2>
 <div class="feed">
-  {% for item in videos %}
-  <article class="post">
-    {% if item.asset %}
-    <video controls playsinline preload="metadata" src="/assets/{{ item.asset.id }}/content"></video>
-    {% else %}
-    <div class="novideo">No video yet · {{ item.experiment.video_status.value }}</div>
-    {% endif %}
-    <div class="meta">
-      <a href="/experiments/{{ item.experiment.id }}"><b>{{ item.ip.name }}</b></a>
-      <span class="tag">{{ item.experiment.video_status.value }}</span>
-    </div>
-    <p class="small">{{ item.experiment.hypothesis.statement }}</p>
-    <p class="muted small">{{ item.experiment.created_at.strftime("%b %d, %H:%M") }} UTC</p>
-  </article>
-  {% endfor %}
+  {% for item in videos if not item.needs_ok %}{{ post(item) }}{% endfor %}
 </div>
-{% if not videos %}<p class="muted">No videos yet. Run <code>hatch run-fixture</code> or start a worker.</p>{% endif %}
+{% if not videos %}<p class="muted">No videos yet.</p>{% endif %}
 {% endblock %}

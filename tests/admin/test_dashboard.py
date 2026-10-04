@@ -121,12 +121,12 @@ def test_experiment_page_shows_lineage_timeline_fitness_and_decisions(
     child_page = client.get(f"/experiments/{descendant.id}").text
 
     assert winner.hypothesis.statement in page
-    assert "request_replication" in page and "conclude_experiment" in page
+    assert "request replication" in page and "conclude experiment" in page
     assert "One strong video is not proof" in page  # the recorded reason
     assert f'href="/experiments/{descendant.id}"' in page  # children
     assert "experiment_created" in page  # the timeline
     assert f'href="/experiments/{winner.id}"' in child_page  # parent
-    assert "replication" in child_page
+    assert "Retest" in child_page  # how it relates to its parent
 
 
 def test_queue_page_shows_failed_jobs_with_their_errors(
@@ -134,7 +134,7 @@ def test_queue_page_shows_failed_jobs_with_their_errors(
 ) -> None:
     page = client.get("/queue").text
 
-    assert "publish_video" in page
+    assert "publish video" in page
     assert "media not fetchable" in page
     assert f'href="/experiments/{world["weak"].id}"' in page
 
@@ -146,7 +146,7 @@ def test_costs_page_shows_spend_and_budget_headroom(
 
     assert "higgsfield" in page
     assert "nibbin-hollow" in page
-    assert "Remaining today" in page
+    assert "Left today" in page
     assert "$0.40" in page or "$0.80" in page
 
 
@@ -156,9 +156,9 @@ def test_decisions_page_lists_reasons_and_can_filter_by_ip(
     everything = client.get("/decisions").text
     filtered = client.get("/decisions?ip=sock-planet").text
 
-    assert "promote_ip" in everything and "conclude_experiment" in everything
+    assert "promote ip" in everything and "conclude experiment" in everything
     assert "replication descendants reached" in everything
-    assert "conclude_experiment" not in filtered
+    assert "conclude experiment" not in filtered
 
 
 def test_unknown_ip_or_experiment_is_a_404(client: TestClient) -> None:
@@ -176,3 +176,47 @@ def test_every_page_has_the_bottom_tab_bar(
     for target in ("/", "/review", "/ips", "/costs", "/decisions"):
         assert f'href="{target}"' in page
     assert 'name="viewport"' in page
+
+
+def test_home_puts_what_needs_you_first_in_plain_words(
+    client: TestClient, world: dict[str, Experiment]
+) -> None:
+    page = client.get("/").text
+
+    assert "Needs you" in page
+    assert page.index("Needs you") < page.index(str(world["winner"].id))
+    assert f'href="/review/{world["waiting"].id}"' in page
+    assert "Needs your OK" in page
+    visible = page.replace('title="approval_pending"', "")
+    assert "approval_pending" not in visible
+
+
+def test_feed_cards_say_where_a_video_was_posted(
+    client: TestClient, world: dict[str, Experiment]
+) -> None:
+    page = client.get("/").text
+
+    assert "Not posted yet" in page
+
+
+def test_times_are_marked_up_for_the_browsers_own_time_zone(
+    client: TestClient, world: dict[str, Experiment]
+) -> None:
+    page = client.get("/").text
+
+    assert '<time class="t" datetime="' in page
+    assert "Intl.DateTimeFormat" in page  # converts to the viewer's zone, UTC if it cannot
+
+
+def test_experiment_page_shows_the_family_as_a_tree_with_the_hypotheses(
+    client: TestClient, world: dict[str, Experiment]
+) -> None:
+    winner, descendant = world["winner"], world["descendant"]
+
+    parent_view = client.get(f"/experiments/{winner.id}").text
+    child_view = client.get(f"/experiments/{descendant.id}").text
+
+    assert descendant.hypothesis.statement[:40] in parent_view  # children show what they test
+    assert winner.hypothesis.statement[:40] in child_view  # and so does the parent
+    assert 'class="tree"' in child_view
+    assert "You are here" in child_view

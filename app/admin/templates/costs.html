@@ -4,9 +4,9 @@
 {% block content %}
 <h1>Spend</h1>
 <div class="cards">
-  <div class="card"><div class="muted">Remaining today</div><div class="big">{{ money(budget.remaining_today) }}</div>
+  <div class="card"><div class="muted">Left today</div><div class="big">{{ money(budget.remaining_today) }}</div>
     <div class="muted">{{ money(budget.spent_24h) }} of {{ money(budget.daily_limit) }} used in 24h</div></div>
-  <div class="card"><div class="muted">Remaining in 30-day window</div><div class="big">{{ money(budget.remaining_30d) }}</div>
+  <div class="card"><div class="muted">Left this month</div><div class="big">{{ money(budget.remaining_30d) }}</div>
     <div class="muted">{{ money(budget.spent_30d) }} of {{ money(budget.monthly_limit) }}</div></div>
   <div class="card"><div class="muted">Cost per video</div><div class="big">{{ money(report.cost_per_video_usd) }}</div>
     <div class="muted">hard maximum {{ money(budget.max_per_video) }}</div></div>

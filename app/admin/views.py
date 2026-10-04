@@ -116,7 +116,7 @@ def portfolio(
 
 
 def videos(session: Session, limit: int = 40) -> list[dict[str, Any]]:
-    """The newest experiments, each with its final video when one exists."""
+    """The newest experiments, each with its final video and where it was posted."""
     rows = []
     for experiment in session.scalars(
         select(Experiment).order_by(Experiment.created_at.desc(), Experiment.id).limit(limit)
@@ -127,9 +127,40 @@ def videos(session: Session, limit: int = 40) -> list[dict[str, Any]]:
                 "experiment": experiment,
                 "ip": experiment.ip,
                 "asset": finals[-1] if finals else None,
+                "posts": sorted(experiment.publications, key=lambda p: p.platform.value),
+                "needs_ok": experiment.video_status is VideoStatus.APPROVAL_PENDING,
             }
         )
     return rows
+
+
+def family_tree(session: Session, experiment_id: uuid.UUID, max_depth: int = 6) -> dict[str, Any]:
+    """The lineage around one experiment: its root and everything beneath it,
+    with the experiment itself marked. Nodes carry what they test and how they
+    relate to their parent, so the tree reads without opening each video."""
+    edges = {edge.experiment_id: edge for edge in session.scalars(select(ExperimentParent))}
+    children: dict[uuid.UUID, list[uuid.UUID]] = {}
+    for child, edge in edges.items():
+        children.setdefault(edge.parent_id, []).append(child)
+
+    root = experiment_id
+    seen = {root}
+    while root in edges and edges[root].parent_id not in seen:
+        root = edges[root].parent_id
+        seen.add(root)
+
+    def node(current: uuid.UUID, depth: int) -> dict[str, Any]:
+        experiment = session.get_one(Experiment, current)
+        edge = edges.get(current)
+        kids = children.get(current, [])
+        return {
+            "experiment": experiment,
+            "relation": edge.relation.value if edge else None,
+            "here": current == experiment_id,
+            "children": [node(kid, depth + 1) for kid in kids] if depth < max_depth else [],
+        }
+
+    return node(root, 0)
 
 
 def _experiment_rows(session: Session, experiments: list[Experiment]) -> list[dict[str, Any]]:
