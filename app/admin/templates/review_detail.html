@@ -3,7 +3,7 @@
 {% block content %}
 <h1>{{ lineage.ip.name }} {{ lineage.experiment.video_status | status }}</h1>
 {% if lineage.final_asset %}
-<video controls playsinline preload="metadata" aria-label="Video from {{ lineage.ip.name }}" src="/assets/{{ lineage.final_asset.id }}/content"></video>
+<video controls playsinline preload="metadata" style="max-height:42vh;margin:0 auto" aria-label="Video from {{ lineage.ip.name }}" src="/assets/{{ lineage.final_asset.id }}/content"></video>
 <p class="muted small">
   {{ lineage.final_asset.media_info.width }}×{{ lineage.final_asset.media_info.height }},
   {{ "%.0f" | format(lineage.final_asset.media_info.duration_seconds) }}s,
