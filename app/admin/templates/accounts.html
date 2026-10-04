@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Accounts · Hatch{% endblock %}
+{% block content %}
+<h1>Accounts to create</h1>
+<p class="muted small">Hatch never creates accounts. You create each one as a kids brand, connect it in Buffer, then map it with <code>hatch accounts map</code>. Start with one IP to prove publishing before paying for all twelve.</p>
+{% for row in rows %}
+<h2>{{ row.ip.name }} · {{ row.done }} of {{ row.accounts | length }} mapped</h2>
+{% for acct in row.accounts %}
+<div class="card acct" style="margin-bottom:10px">
+  <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+    <b>{{ acct.platform }}</b>
+    {% if acct.mapped %}<span class="tag good">Mapped{% if acct.handle %} · {{ acct.handle }}{% endif %}</span>{% else %}<span class="tag flag">To do</span>{% endif %}
+  </div>
+  {% if not acct.mapped %}
+  <p class="small" style="margin:8px 0 2px"><b>Name:</b> {{ acct.name }}<br><b>Handle ideas:</b> {{ acct.handle_ideas | join(", ") }} <span class="muted">(or the closest free one)</span></p>
+  <p class="small" style="margin:6px 0 2px"><b>Bio:</b> {{ acct.bio }}</p>
+  <p class="muted small" style="margin:6px 0 0">{{ acct.tip }}</p>
+  {% endif %}
+</div>
+{% endfor %}
+{% endfor %}
+{% if not rows %}<p class="muted">No IPs yet.</p>{% endif %}
+{% endblock %}

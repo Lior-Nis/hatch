@@ -220,3 +220,42 @@ def test_experiment_page_shows_the_family_as_a_tree_with_the_hypotheses(
     assert winner.hypothesis.statement[:40] in child_view  # and so does the parent
     assert 'class="tree"' in child_view
     assert "You are here" in child_view
+
+
+def test_accounts_page_lists_every_ip_platform_pair_with_what_to_create(
+    client: TestClient, session: Session, world: dict[str, Experiment]
+) -> None:
+    from sqlalchemy import select
+
+    from app.ips.models import IP
+    from app.platforms import Platform
+    from app.publishing.models import PlatformAccount
+
+    ips = list(session.scalars(select(IP)))
+    page = client.get("/accounts").text
+
+    assert page.count('class="card acct"') == len(ips) * len(Platform)
+    assert "To do" in page and "Mapped" not in page
+    nibbin = next(ip for ip in ips if ip.slug == "nibbin-hollow")
+    assert "nibbinhollow" in page  # a suggested handle
+    assert nibbin.spec["premise"][:30] in page  # the bio is drawn from the premise
+    assert "made for kids" in page.lower()
+
+    session.add(
+        PlatformAccount(
+            ip_id=nibbin.id,
+            platform=Platform.TIKTOK,
+            external_account_id="tt-1",
+            publisher_profile_id="buf-tt",
+            handle="@nibbinhollow",
+        )
+    )
+    session.flush()
+    after = client.get("/accounts").text
+    assert after.count("Mapped") == 1
+
+
+def test_the_ips_page_links_to_the_accounts_checklist(
+    client: TestClient, world: dict[str, Experiment]
+) -> None:
+    assert 'href="/accounts"' in client.get("/ips").text

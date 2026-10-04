@@ -17,7 +17,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.admin import display, views
+from app.admin import accounts, display, views
 from app.bootstrap import build_asset_store
 from app.budgets.governor import BudgetLimits
 from app.config import get_settings
@@ -132,6 +132,12 @@ def create_app() -> FastAPI:
     def ips_page(request: Request, session: SessionDep) -> HTMLResponse:
         return templates.TemplateResponse(
             request, "dashboard.html", views.portfolio(session, limits())
+        )
+
+    @app.get("/accounts", response_class=HTMLResponse)
+    def accounts_page(request: Request, session: SessionDep) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request, "accounts.html", {"rows": accounts.checklist(session)}
         )
 
     @app.get("/ips/{slug}", response_class=HTMLResponse)
